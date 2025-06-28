@@ -6,24 +6,10 @@ yarn-error.log*
 .npm
 .yarn-integrity
 
-# Build outputs and cache
-dist/
-build/
-.cache/
-.parcel-cache/
-.next/
-.nuxt/
-out/
-
-# Git and version control
-.git/
-.gitignore
-.gitattributes
-
-# Environment files (except template)
+# Environment files (except examples)
 .env
-.env.*
-!.env.example
+.env.local
+.env.*.local
 
 # Development and IDE files
 .vscode/
@@ -37,11 +23,6 @@ Thumbs.db
 # Logs
 logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-monitoring/
 
 # Testing and coverage
 test/
@@ -49,72 +30,36 @@ tests/
 __tests__/
 coverage/
 .nyc_output/
-*.test.js
-*.spec.js
-jest.config.*
-.jest/
 
-# Documentation
+# Temporary and cache files
+tmp/
+temp/
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+
+# Build outputs (will be rebuilt in container)
+dist/
+
+# Git (but allow .gitignore)
+.git/
+
+# Documentation (keep README.md)
 docs/
-*.md
-README*
 CHANGELOG*
 LICENSE*
 CONTRIBUTING*
-DEMO_SCRIPT.md
-TESTING_GUIDE.md
-STRATEGIC_PLANNING.md
-WEEK*.md
-DOCKER_DEPLOYMENT.md
-
-# Backup files
-*.backup
-*.bak
-*.orig
-Dockerfile.backup
-Dockerfile.simple-backup
-.dockerignore.original
-
-# Docker files (keep main ones)
-docker-compose.yml
-docker-compose.smithery.yml
-
-# Configuration files (keep essential ones)
-smithery.complex.yaml
-smithery-config.json
-claude_desktop_config.json.example
-
-# OAuth test files
-oauth-test.js
-start-oauth.cjs
-oauth-server-final.cjs
-
-# Setup files
-setup-wizard.ts
-cli.ts
-
-# TypeScript compiled output (will be rebuilt)
-*.tsbuildinfo
-*.d.ts.map
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.temp
 
 # Archive files
 *.zip
 *.tar.gz
 *.rar
 *.7z
-*.tgz
 
 # OS generated files
-.DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db
