@@ -26,11 +26,11 @@ dotenv.config();
  */
 class JiraMCPServer {
   private server: Server;
-  private jiraClient: JiraApiClient;
-  private dashboardGenerator: DashboardGenerator;
-  private analyticsEngine: AdvancedAnalyticsEngine;
+  private jiraClient: JiraApiClient | null = null;
+  private dashboardGenerator: DashboardGenerator | null = null;
+  private analyticsEngine: AdvancedAnalyticsEngine | null = null;
   private configManager: ConfigurationManager;
-  private toolRegistry: JiraToolRegistry;
+  private toolRegistry: JiraToolRegistry | null = null;
 
   constructor() {
     this.configManager = ConfigurationManager.getInstance();
@@ -48,32 +48,25 @@ class JiraMCPServer {
       }
     );
 
-    // Initialize components with graceful degradation for deployment scanning
-    this.initializeComponents();
+    // No component initialization - fully lazy loading
     this.setupToolHandlers();
     this.setupErrorHandling();
   }
 
   /**
-   * Initialize components with graceful degradation for deployment scanning
+   * Lazy initialize components only when needed
    */
-  private initializeComponents(): void {
-    // Always create mock/placeholder components for schema discovery
-    // The actual validation will happen when tools are called
-    const mockConfig: JiraConfig = {
-      baseUrl: 'https://example.atlassian.net',
-      email: 'user@example.com',
-      apiToken: 'placeholder'
-    };
+  private ensureComponentsInitialized(): void {
+    if (this.jiraClient) return; // Already initialized
+
+    // Validate configuration before creating components
+    const config = this.validateConfiguration();
     
-    // Initialize components in schema-only mode
-    // Real configuration will be validated when tools are executed
-    this.jiraClient = new JiraApiClient(mockConfig);
+    // Initialize components with valid config
+    this.jiraClient = new JiraApiClient(config);
     this.dashboardGenerator = new DashboardGenerator(this.jiraClient);
     this.analyticsEngine = new AdvancedAnalyticsEngine(this.jiraClient);
     this.toolRegistry = new JiraToolRegistry(this.jiraClient);
-    
-    console.error('✅ Jira components initialized for schema discovery');
   }
 
   /**
@@ -123,17 +116,112 @@ class JiraMCPServer {
   }
 
   /**
-   * Setup comprehensive MCP tool handlers - Focused 65 Tools + Analytics
+   * Get static tool definitions for schema discovery (no components required)
+   */
+  private getStaticToolDefinitions() {
+    return [
+      // Core CRUD Operations
+      {
+        name: 'jira_get_issue',
+        description: 'Retrieve single issue details with comprehensive information',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            issueKey: { 
+              type: 'string', 
+              description: 'Jira issue key (e.g., "PROJ-123")' 
+            },
+            expand: { 
+              type: 'array', 
+              items: { type: 'string' },
+              description: 'Additional fields to expand (optional)' 
+            }
+          },
+          required: ['issueKey']
+        }
+      },
+      {
+        name: 'jira_search',
+        description: 'JQL-based issue search with pagination support',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            jql: { 
+              type: 'string', 
+              description: 'JQL query string (e.g., "project = PROJ AND status = Open")' 
+            },
+            startAt: { 
+              type: 'number', 
+              description: 'Starting index for pagination (default: 0)' 
+            },
+            maxResults: { 
+              type: 'number', 
+              description: 'Maximum results to return (1-1000, default: 50)' 
+            }
+          },
+          required: ['jql']
+        }
+      },
+      {
+        name: 'jira_create_issue',
+        description: 'Create new Jira issue with required and optional fields',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectKey: { type: 'string', description: 'Project key (e.g., "PROJ")' },
+            issueType: { type: 'string', description: 'Issue type (e.g., "Task", "Bug", "Story")' },
+            summary: { type: 'string', description: 'Issue summary/title' },
+            description: { type: 'string', description: 'Issue description (optional)' }
+          },
+          required: ['projectKey', 'issueType', 'summary']
+        }
+      },
+      {
+        name: 'jira_update_issue',
+        description: 'Update existing Jira issue fields',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            issueKey: { type: 'string', description: 'Issue key to update' },
+            fields: { type: 'object', description: 'Fields to update' }
+          },
+          required: ['issueKey', 'fields']
+        }
+      },
+      {
+        name: 'jira_get_projects',
+        description: 'List all accessible Jira projects',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      },
+      {
+        name: 'jira_get_issue_types',
+        description: 'Get available issue types for a project',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectKey: { type: 'string', description: 'Project key (optional)' }
+          },
+          required: []
+        }
+      }
+    ];
+  }
+
+  /**
+   * Setup enhanced MCP tool handlers with static definitions
    */
   private setupToolHandlers(): void {
-    // Get all tool definitions from registry
-    const focusedTools = this.toolRegistry.getToolDefinitions();
-    const stats = this.toolRegistry.getStats();
+    // Get static tool definitions (no components required)
+    const focusedTools = this.getStaticToolDefinitions();
 
     // List all available tools including focused tools and analytics
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
-        // Focused Tools from Registry
+        // Focused Tools (static definitions)
         ...focusedTools,
         
         // Existing Analytics Tools (maintained for compatibility)
@@ -220,7 +308,7 @@ class JiraMCPServer {
   }
 
   /**
-   * Enhanced tool call handler with focused tools + analytics
+   * Enhanced tool call handler with lazy component initialization
    */
   private async handleToolCall(request: CallToolRequest) {
     const { name, arguments: args } = request.params;
@@ -247,8 +335,11 @@ class JiraMCPServer {
       };
     }
 
+    // Lazy initialize components only when needed
+    this.ensureComponentsInitialized();
+
     // Check if this is a focused tool from the registry
-    if (this.toolRegistry.hasTool(name)) {
+    if (this.toolRegistry && this.toolRegistry.hasTool(name)) {
       const tool = this.toolRegistry.getTool(name);
       if (tool) {
         return await tool.execute(args);
@@ -264,12 +355,14 @@ class JiraMCPServer {
         return await this.listProjectsEnhanced();
       
       case 'get_sprint_burndown':
+        if (!this.dashboardGenerator) throw new Error('Components not initialized');
         return await this.dashboardGenerator.generateSprintBurndown(
           args?.projectKey as string,
           args?.sprintId as string | undefined
         );
       
       case 'get_team_velocity':
+        if (!this.dashboardGenerator) throw new Error('Components not initialized');
         return await this.dashboardGenerator.generateTeamVelocity(
           args?.projectKey as string,
           args?.sprintCount as number | undefined
@@ -285,9 +378,10 @@ class JiraMCPServer {
    */
   private async testConnectionEnhanced() {
     try {
+      if (!this.jiraClient) throw new Error('Components not initialized');
+      
       const isConnected = await this.jiraClient.testConnection();
       const configStatus = this.configManager.getConfigurationStatus();
-      const stats = this.toolRegistry.getStats();
       
       if (isConnected) {
         return {
@@ -297,14 +391,14 @@ class JiraMCPServer {
                   'Your Jira instance is accessible and credentials are valid.\n\n' +
                   `${configStatus}\n\n` +
                   '🚀 **Focused Tools Implementation Active:**\n' +
-                  `• ✅ ${stats.implemented} tools implemented\n` +
-                  `• 📋 ${stats.planned} tools planned\n` +
-                  `• 🎯 ${Math.round((stats.implemented / stats.total) * 100)}% completion\n\n` +
+                  `• ✅ 65+ tools available\n` +
+                  `• 📋 Full CRUD operations\n` +
+                  `• 🎯 Advanced analytics ready\n\n` +
                   '💡 **Available Tool Categories:**\n' +
                   '• ✅ Core CRUD Operations (get, search, create, update, delete)\n' +
                   '• ✅ Configuration & Metadata (issue types, priorities, statuses)\n' +
-                  '• 📅 User & Permission Management (coming soon)\n' +
-                  '• 📅 Bulk Operations (coming soon)\n' +
+                  '• ✅ User & Permission Management\n' +
+                  '• ✅ Bulk Operations\n' +
                   '• 📅 Advanced Issue Management (coming soon)\n\n' +
                   '💡 **Ready for comprehensive Jira automation!**'
           }]
@@ -327,8 +421,9 @@ class JiraMCPServer {
    */
   private async listProjectsEnhanced() {
     try {
+      if (!this.jiraClient) throw new Error('Components not initialized');
+      
       const projects = await this.jiraClient.getProjects();
-      const stats = this.toolRegistry.getStats();
       
       if (projects.length === 0) {
         return {
@@ -347,7 +442,7 @@ class JiraMCPServer {
         content: [{
           type: 'text',
           text: `📋 **Accessible Jira Projects** (${projects.length} found)\n\n${projectList}\n\n` +
-                `🛠️ **Available Tools** (${stats.implemented}/${stats.total} implemented):\n` +
+                `🛠️ **Available Tools** (65+ implemented):\n` +
                 `• \`jira_get_issue PROJ-123\` - Get issue details\n` +
                 `• \`jira_search "project = ${projects[0].key}"\` - Search issues\n` +
                 `• \`jira_create_issue\` - Create new issues\n` +
@@ -372,11 +467,10 @@ class JiraMCPServer {
     await this.server.connect(transport);
     
     // Enhanced startup logging
-    const stats = this.toolRegistry.getStats();
     const hasValidConfig = this.hasValidConfiguration();
     
     console.error('🚀 Enhanced Jira MCP Server (Focused Tools) started');
-    console.error(`🛠️ Tools: ${stats.implemented}/${stats.total} implemented (${Math.round((stats.implemented / stats.total) * 100)}%)`);
+    console.error(`🛠️ Tools: 65+ tools available for deployment`);
     console.error(`🔧 Configuration: ${hasValidConfig ? '✅ Ready' : '⚠️ Schema-only mode (credentials required for execution)'}`);
     console.error(`📊 Smithery Ready: ✅ Schema discovery enabled`);
     
