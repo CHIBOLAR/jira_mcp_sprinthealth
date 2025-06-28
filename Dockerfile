@@ -57,7 +57,7 @@ EXPOSE 3000
 # Environment variables
 ENV NODE_ENV=production \
     PORT=3000 \
-    MODE=http
+    MODE=stdio
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
