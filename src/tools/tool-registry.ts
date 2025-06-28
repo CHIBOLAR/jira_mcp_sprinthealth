@@ -18,6 +18,11 @@ import { JiraGetIssueTypesTool } from './configuration/get-issue-types.js';
 import { JiraGetPrioritiesTool } from './configuration/get-priorities.js';
 import { JiraGetStatusesTool } from './configuration/get-statuses.js';
 import { JiraGetProjectsTool } from './configuration/get-projects.js';
+import { JiraGetResolutionsTool } from './configuration/get-resolutions.js';
+import { JiraGetCustomFieldsTool } from './configuration/get-custom-fields.js';
+import { JiraGetVersionsTool } from './configuration/get-versions.js';
+import { JiraGetComponentsTool } from './configuration/get-components.js';
+import { JiraGetProjectRolesTool } from './configuration/get-project-roles.js';
 
 /**
  * Tool definition for MCP server registration
@@ -409,21 +414,87 @@ export class JiraToolRegistry {
       tool: new JiraGetProjectsTool(this.jiraClient)
     });
 
-    // TODO: Add remaining tools as they are implemented
-    // Phase 1 remaining tools (will be implemented next):
-    // - jira_get_transitions
-    // - jira_transition_issue
-    // - jira_add_comment
-    // - jira_add_worklog
-    // - jira_get_worklog
-    // - jira_get_priorities
-    // - jira_get_resolutions
-    // - jira_get_statuses
-    // - jira_get_custom_fields
-    // - jira_get_versions
-    // - jira_get_components
-    // - jira_get_project_roles
-    // - jira_get_projects
+    this.registerTool('jira_get_resolutions', {
+      description: 'Get available resolution types for closing issues',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: []
+      },
+      tool: new JiraGetResolutionsTool(this.jiraClient)
+    });
+
+    this.registerTool('jira_get_custom_fields', {
+      description: 'Get custom field definitions with type and context information',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectKey: { 
+            type: 'string', 
+            description: 'Project key for project-specific fields (optional)' 
+          },
+          type: { 
+            type: 'string', 
+            description: 'Filter by field type (optional)' 
+          }
+        },
+        required: []
+      },
+      tool: new JiraGetCustomFieldsTool(this.jiraClient)
+    });
+
+    this.registerTool('jira_get_versions', {
+      description: 'Get project versions with release and status information',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectKey: { 
+            type: 'string', 
+            description: 'Project key to get versions for (e.g., "PROJ")' 
+          },
+          expand: { 
+            type: 'array', 
+            items: { type: 'string' },
+            description: 'Additional fields to expand (optional)' 
+          }
+        },
+        required: ['projectKey']
+      },
+      tool: new JiraGetVersionsTool(this.jiraClient)
+    });
+
+    this.registerTool('jira_get_components', {
+      description: 'Get project components with lead and assignment information',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectKey: { 
+            type: 'string', 
+            description: 'Project key to get components for (e.g., "PROJ")' 
+          }
+        },
+        required: ['projectKey']
+      },
+      tool: new JiraGetComponentsTool(this.jiraClient)
+    });
+
+    this.registerTool('jira_get_project_roles', {
+      description: 'Get project roles with assignments and permissions information',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectKey: { 
+            type: 'string', 
+            description: 'Project key to get roles for (e.g., "PROJ")' 
+          }
+        },
+        required: ['projectKey']
+      },
+      tool: new JiraGetProjectRolesTool(this.jiraClient)
+    });
+
+    // ✅ Phase 1 Complete: Foundation Sprint (18/18 tools implemented)
+    // 🚀 Ready for Phase 2: User & Bulk Operations (10 tools planned)
   }
 
   /**
