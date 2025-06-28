@@ -1,5 +1,5 @@
 # Multi-stage build for optimal size and security
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -9,6 +9,7 @@ COPY package*.json ./
 
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci --include=dev
+
 # Copy source code
 COPY src/ ./src/
 COPY types/ ./types/
@@ -18,7 +19,7 @@ COPY tsconfig.json ./
 RUN npm run build
 
 # Production stage - minimal runtime image
-FROM node:18-alpine AS production
+FROM node:20-alpine AS production
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
@@ -57,7 +58,9 @@ EXPOSE 3000
 # Environment variables
 ENV NODE_ENV=production \
     PORT=3000 \
-    MODE=stdio
+    MODE=stdio \
+    LOG_LEVEL=info \
+    ENABLE_CACHING=false
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \

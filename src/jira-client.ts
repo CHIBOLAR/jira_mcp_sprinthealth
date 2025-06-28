@@ -398,4 +398,42 @@ export class JiraApiClient {
     this.cache.clear();
     console.log('🧹 Jira API cache cleared');
   }
+
+  /**
+   * Generic request method for tools
+   * Makes HTTP requests to the specified endpoint with optional configuration
+   */
+  async makeRequest(endpoint: string, options?: {
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+    data?: any;
+    params?: any;
+  }): Promise<any> {
+    try {
+      const method = options?.method || 'GET';
+      const config: any = {
+        method: method.toLowerCase(),
+        url: endpoint
+      };
+
+      if (options?.data) {
+        config.data = options.data;
+      }
+
+      if (options?.params) {
+        config.params = options.params;
+      }
+
+      const response = await this.client.request(config);
+      return response.data;
+    } catch (error) {
+      throw ErrorHandler.categorizeAndHandle(error, { operation: 'make_request' });
+    }
+  }
+
+  /**
+   * Get the base URL of the Jira instance
+   */
+  getBaseUrl(): string {
+    return this.config.baseUrl;
+  }
 }
