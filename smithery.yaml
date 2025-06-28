@@ -9,14 +9,18 @@ startCommand:
         type: "string"
         title: "Jira Base URL"
         description: "Base URL for your Jira instance (e.g., https://company.atlassian.net)"
+        pattern: "^https://.+\\.atlassian\\.net$"
       jiraEmail:
         type: "string"
         title: "Jira Email"
         description: "Email address for Jira authentication"
+        format: "email"
       jiraApiToken:
         type: "string"
         title: "Jira API Token"
-        description: "API token for Jira authentication"
+        description: "API token for Jira authentication. Get one from: https://id.atlassian.com/manage-profile/security/api-tokens"
+        minLength: 24
+        format: "password"
     required: ["jiraBaseUrl", "jiraEmail", "jiraApiToken"]
 
 exampleConfig:
