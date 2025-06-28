@@ -35,9 +35,6 @@ class JiraMCPServer {
   constructor() {
     this.configManager = ConfigurationManager.getInstance();
     
-    // Validate and get configuration
-    const config = this.validateConfiguration();
-    
     // Initialize server with enhanced capabilities
     this.server = new Server(
       {
@@ -51,16 +48,56 @@ class JiraMCPServer {
       }
     );
 
-    // Initialize enhanced components
-    this.jiraClient = new JiraApiClient(config);
-    this.dashboardGenerator = new DashboardGenerator(this.jiraClient);
-    this.analyticsEngine = new AdvancedAnalyticsEngine(this.jiraClient);
-    
-    // Initialize new focused tool registry
-    this.toolRegistry = new JiraToolRegistry(this.jiraClient);
-
+    // Initialize components with graceful degradation for deployment scanning
+    this.initializeComponents();
     this.setupToolHandlers();
     this.setupErrorHandling();
+  }
+
+  /**
+   * Initialize components with graceful degradation for deployment scanning
+   */
+  private initializeComponents(): void {
+    try {
+      // Try to validate and get configuration
+      const config = this.validateConfiguration();
+      
+      // Initialize enhanced components with valid config
+      this.jiraClient = new JiraApiClient(config);
+      this.dashboardGenerator = new DashboardGenerator(this.jiraClient);
+      this.analyticsEngine = new AdvancedAnalyticsEngine(this.jiraClient);
+      this.toolRegistry = new JiraToolRegistry(this.jiraClient);
+      
+      console.error('✅ Jira components initialized with valid configuration');
+    } catch (error) {
+      // Graceful degradation: Initialize with minimal config for schema discovery
+      console.error('⚠️ Jira credentials not configured, running in schema-only mode');
+      
+      // Create minimal mock config for schema discovery
+      const mockConfig: JiraConfig = {
+        baseUrl: 'https://example.atlassian.net',
+        email: 'user@example.com',
+        apiToken: 'placeholder'
+      };
+      
+      // Initialize components in read-only/schema mode
+      this.jiraClient = new JiraApiClient(mockConfig);
+      this.dashboardGenerator = new DashboardGenerator(this.jiraClient);
+      this.analyticsEngine = new AdvancedAnalyticsEngine(this.jiraClient);
+      this.toolRegistry = new JiraToolRegistry(this.jiraClient);
+    }
+  }
+
+  /**
+   * Check if server has valid Jira configuration
+   */
+  private hasValidConfiguration(): boolean {
+    try {
+      const validation = this.configManager.validateConfiguration();
+      return validation.valid;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -200,6 +237,28 @@ class JiraMCPServer {
   private async handleToolCall(request: CallToolRequest) {
     const { name, arguments: args } = request.params;
 
+    // Check if we have valid Jira configuration before executing tools
+    try {
+      this.validateConfiguration();
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ **Configuration Required**\n\n` +
+                `This Jira MCP server requires valid credentials to execute tools.\n\n` +
+                `**Required Environment Variables:**\n` +
+                `• JIRA_URL - Your Jira instance URL (e.g., https://company.atlassian.net)\n` +
+                `• JIRA_EMAIL - Your Jira account email\n` +
+                `• JIRA_API_TOKEN - Your Jira API token\n\n` +
+                `**To get an API token:**\n` +
+                `1. Go to https://id.atlassian.com/manage-profile/security/api-tokens\n` +
+                `2. Create a new API token\n` +
+                `3. Copy it to your JIRA_API_TOKEN environment variable\n\n` +
+                `**Tool attempted:** \`${name}\``
+        }]
+      };
+    }
+
     // Check if this is a focused tool from the registry
     if (this.toolRegistry.hasTool(name)) {
       const tool = this.toolRegistry.getTool(name);
@@ -327,11 +386,16 @@ class JiraMCPServer {
     // Enhanced startup logging
     const envConfig = this.configManager.getEnvironmentConfig();
     const stats = this.toolRegistry.getStats();
+    const hasValidConfig = this.hasValidConfiguration();
     
     console.error('🚀 Enhanced Jira MCP Server (Focused Tools) started');
     console.error(`🛠️ Tools: ${stats.implemented}/${stats.total} implemented (${Math.round((stats.implemented / stats.total) * 100)}%)`);
-    console.error(`🔧 Environment: ${this.configManager.getJiraConfig().baseUrl ? 'Configured' : 'Not Configured'}`);
+    console.error(`🔧 Configuration: ${hasValidConfig ? '✅ Ready' : '⚠️ Schema-only mode (credentials required for execution)'}`);
     console.error(`📊 Smithery Ready: Production deployment available`);
+    
+    if (!hasValidConfig) {
+      console.error('💡 To enable full functionality, configure: JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN');
+    }
     
     if (envConfig.enableDebugLogging) {
       console.error('🐛 Debug logging enabled');
