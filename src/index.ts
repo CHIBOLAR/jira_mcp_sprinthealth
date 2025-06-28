@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+// Jira MCP Sprint Health Server - Production Entry Point
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

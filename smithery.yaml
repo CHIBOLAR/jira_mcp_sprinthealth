@@ -1,32 +1,37 @@
-runtime: container
+name: "jira-mcp-sprinthealth"
+version: "2.0.0"
+description: "Enhanced Jira Sprint Dashboard MCP Server with advanced analytics and predictive insights"
+main: "dist/index.js"
+license: "MIT"
+repository: "https://github.com/CHIBOLAR/jira_mcp_sprinthealth"
+author: "CHIBOLAR"
+
+runtime: "container"
 
 build:
-  dockerfile: Dockerfile
-  dockerBuildPath: .
+  dockerfile: "Dockerfile"
+  dockerBuildPath: "."
 
 startCommand:
-  type: stdio
+  type: "stdio"
   configSchema:
-    type: object
+    type: "object"
     properties:
       jiraBaseUrl:
-        type: string
-        title: Jira Base URL
-        description: Base URL for your Jira instance (e.g., https://company.atlassian.net)
+        type: "string"
+        title: "Jira Base URL"
+        description: "Base URL for your Jira instance (e.g., https://company.atlassian.net)"
       jiraEmail:
-        type: string
-        title: Jira Email
-        description: Email address for Jira authentication
+        type: "string"
+        title: "Jira Email"  
+        description: "Email address for Jira authentication"
       jiraApiToken:
-        type: string
-        title: Jira API Token
-        description: API token for Jira authentication
-    required:
-      - jiraBaseUrl
-      - jiraEmail
-      - jiraApiToken
+        type: "string"
+        title: "Jira API Token"
+        description: "API token for Jira authentication"
+    required: ["jiraBaseUrl", "jiraEmail", "jiraApiToken"]
 
 exampleConfig:
-  jiraBaseUrl: https://your-company.atlassian.net
-  jiraEmail: user@company.com
-  jiraApiToken: your-api-token-here
+  jiraBaseUrl: "https://your-company.atlassian.net"
+  jiraEmail: "user@company.com"
+  jiraApiToken: "your-api-token-here"
