@@ -58,34 +58,22 @@ class JiraMCPServer {
    * Initialize components with graceful degradation for deployment scanning
    */
   private initializeComponents(): void {
-    try {
-      // Try to validate and get configuration
-      const config = this.validateConfiguration();
-      
-      // Initialize enhanced components with valid config
-      this.jiraClient = new JiraApiClient(config);
-      this.dashboardGenerator = new DashboardGenerator(this.jiraClient);
-      this.analyticsEngine = new AdvancedAnalyticsEngine(this.jiraClient);
-      this.toolRegistry = new JiraToolRegistry(this.jiraClient);
-      
-      console.error('✅ Jira components initialized with valid configuration');
-    } catch (error) {
-      // Graceful degradation: Initialize with minimal config for schema discovery
-      console.error('⚠️ Jira credentials not configured, running in schema-only mode');
-      
-      // Create minimal mock config for schema discovery
-      const mockConfig: JiraConfig = {
-        baseUrl: 'https://example.atlassian.net',
-        email: 'user@example.com',
-        apiToken: 'placeholder'
-      };
-      
-      // Initialize components in read-only/schema mode
-      this.jiraClient = new JiraApiClient(mockConfig);
-      this.dashboardGenerator = new DashboardGenerator(this.jiraClient);
-      this.analyticsEngine = new AdvancedAnalyticsEngine(this.jiraClient);
-      this.toolRegistry = new JiraToolRegistry(this.jiraClient);
-    }
+    // Always create mock/placeholder components for schema discovery
+    // The actual validation will happen when tools are called
+    const mockConfig: JiraConfig = {
+      baseUrl: 'https://example.atlassian.net',
+      email: 'user@example.com',
+      apiToken: 'placeholder'
+    };
+    
+    // Initialize components in schema-only mode
+    // Real configuration will be validated when tools are executed
+    this.jiraClient = new JiraApiClient(mockConfig);
+    this.dashboardGenerator = new DashboardGenerator(this.jiraClient);
+    this.analyticsEngine = new AdvancedAnalyticsEngine(this.jiraClient);
+    this.toolRegistry = new JiraToolRegistry(this.jiraClient);
+    
+    console.error('✅ Jira components initialized for schema discovery');
   }
 
   /**
@@ -384,24 +372,28 @@ class JiraMCPServer {
     await this.server.connect(transport);
     
     // Enhanced startup logging
-    const envConfig = this.configManager.getEnvironmentConfig();
     const stats = this.toolRegistry.getStats();
     const hasValidConfig = this.hasValidConfiguration();
     
     console.error('🚀 Enhanced Jira MCP Server (Focused Tools) started');
     console.error(`🛠️ Tools: ${stats.implemented}/${stats.total} implemented (${Math.round((stats.implemented / stats.total) * 100)}%)`);
     console.error(`🔧 Configuration: ${hasValidConfig ? '✅ Ready' : '⚠️ Schema-only mode (credentials required for execution)'}`);
-    console.error(`📊 Smithery Ready: Production deployment available`);
+    console.error(`📊 Smithery Ready: ✅ Schema discovery enabled`);
     
     if (!hasValidConfig) {
       console.error('💡 To enable full functionality, configure: JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN');
-    }
-    
-    if (envConfig.enableDebugLogging) {
-      console.error('🐛 Debug logging enabled');
-    }
-    if (envConfig.enablePerformanceLogging) {
-      console.error('⚡ Performance monitoring enabled');
+    } else {
+      try {
+        const envConfig = this.configManager.getEnvironmentConfig();
+        if (envConfig.enableDebugLogging) {
+          console.error('🐛 Debug logging enabled');
+        }
+        if (envConfig.enablePerformanceLogging) {
+          console.error('⚡ Performance monitoring enabled');
+        }
+      } catch (error) {
+        // Environment config unavailable, continue silently
+      }
     }
   }
 }

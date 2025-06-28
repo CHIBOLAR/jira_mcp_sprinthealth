@@ -48,11 +48,11 @@ export interface AdvancedConfig {
 
 export class ConfigurationManager {
   private static instance: ConfigurationManager;
-  private config: AdvancedConfig;
+  private config: AdvancedConfig | null = null;
   private detectedFields = new Map<string, { storyPoints: string; epic: string; sprint: string }>();
 
   private constructor() {
-    this.config = this.loadConfiguration();
+    // Don't load configuration during initialization - use lazy loading
   }
 
   static getInstance(): ConfigurationManager {
@@ -60,6 +60,16 @@ export class ConfigurationManager {
       ConfigurationManager.instance = new ConfigurationManager();
     }
     return ConfigurationManager.instance;
+  }
+
+  /**
+   * Lazy load configuration only when needed
+   */
+  private ensureConfigLoaded(): AdvancedConfig {
+    if (!this.config) {
+      this.config = this.loadConfiguration();
+    }
+    return this.config;
   }
 
   /**
@@ -131,14 +141,15 @@ export class ConfigurationManager {
    * Get configuration for the Jira client
    */
   getJiraConfig(): JiraConfig {
-    return this.config.jira;
+    return this.ensureConfigLoaded().jira;
   }
 
   /**
    * Get project-specific configuration
    */
   getProjectConfig(projectKey: string): ProjectConfig {
-    const existing = this.config.projects.find(p => p.key === projectKey);
+    const config = this.ensureConfigLoaded();
+    const existing = config.projects.find(p => p.key === projectKey);
     return existing || { key: projectKey };
   }
 
@@ -268,7 +279,8 @@ export class ConfigurationManager {
    */
   getHealthThresholds(projectKey: string): HealthThresholds {
     const projectConfig = this.getProjectConfig(projectKey);
-    return projectConfig.healthThresholds || this.config.analytics.defaultHealthThresholds;
+    const config = this.ensureConfigLoaded();
+    return projectConfig.healthThresholds || config.analytics.defaultHealthThresholds;
   }
 
   /**
@@ -281,7 +293,8 @@ export class ConfigurationManager {
       enablePerformanceLogging: false
     };
 
-    switch (this.config.environment) {
+    const config = this.ensureConfigLoaded();
+    switch (config.environment) {
       case 'development':
         return {
           ...baseConfig,
@@ -307,22 +320,33 @@ export class ConfigurationManager {
   validateConfiguration(): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
-    // Validate Jira URL
     try {
-      new URL(this.config.jira.baseUrl);
-    } catch {
-      errors.push('Invalid JIRA_URL format');
-    }
+      const config = this.ensureConfigLoaded();
+      
+      // Validate Jira URL
+      try {
+        new URL(config.jira.baseUrl);
+      } catch {
+        errors.push('Invalid JIRA_URL format');
+      }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(this.config.jira.email)) {
-      errors.push('Invalid JIRA_EMAIL format');
-    }
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(config.jira.email)) {
+        errors.push('Invalid JIRA_EMAIL format');
+      }
 
-    // Validate API token format (should be alphanumeric)
-    if (!/^[a-zA-Z0-9]+$/.test(this.config.jira.apiToken)) {
-      errors.push('Invalid JIRA_API_TOKEN format');
+      // Validate API token format (should be alphanumeric)
+      if (!/^[a-zA-Z0-9]+$/.test(config.jira.apiToken)) {
+        errors.push('Invalid JIRA_API_TOKEN format');
+      }
+    } catch (configError) {
+      // If configuration loading fails, add those errors
+      if ((configError as any).message) {
+        errors.push((configError as any).message);
+      } else {
+        errors.push('Configuration could not be loaded');
+      }
     }
 
     return { valid: errors.length === 0, errors };
@@ -335,14 +359,22 @@ export class ConfigurationManager {
     const validation = this.validateConfiguration();
     const env = this.getEnvironmentConfig();
     
-    return `📋 **Configuration Status**\n\n` +
-           `**Environment**: ${this.config.environment.toUpperCase()}\n` +
-           `**Jira URL**: ${this.config.jira.baseUrl}\n` +
-           `**Email**: ${this.config.jira.email}\n` +
-           `**Projects Configured**: ${this.config.projects.length}\n` +
-           `**Caching**: ${this.config.performance.enableCaching ? 'Enabled' : 'Disabled'}\n` +
-           `**Debug Logging**: ${env.enableDebugLogging ? 'Enabled' : 'Disabled'}\n\n` +
-           `**Validation**: ${validation.valid ? '✅ Valid' : '❌ Issues Found'}\n` +
-           `${validation.errors.length > 0 ? validation.errors.map(e => `• ${e}`).join('\n') : ''}`;
+    try {
+      const config = this.ensureConfigLoaded();
+      return `📋 **Configuration Status**\n\n` +
+             `**Environment**: ${config.environment.toUpperCase()}\n` +
+             `**Jira URL**: ${config.jira.baseUrl}\n` +
+             `**Email**: ${config.jira.email}\n` +
+             `**Projects Configured**: ${config.projects.length}\n` +
+             `**Caching**: ${config.performance.enableCaching ? 'Enabled' : 'Disabled'}\n` +
+             `**Debug Logging**: ${env.enableDebugLogging ? 'Enabled' : 'Disabled'}\n\n` +
+             `**Validation**: ${validation.valid ? '✅ Valid' : '❌ Issues Found'}\n` +
+             `${validation.errors.length > 0 ? validation.errors.map(e => `• ${e}`).join('\n') : ''}`;
+    } catch (error) {
+      return `📋 **Configuration Status**\n\n` +
+             `**Status**: ❌ Configuration not available\n` +
+             `**Validation**: ${validation.valid ? '✅ Valid' : '❌ Issues Found'}\n` +
+             `${validation.errors.length > 0 ? validation.errors.map(e => `• ${e}`).join('\n') : ''}`;
+    }
   }
 }
