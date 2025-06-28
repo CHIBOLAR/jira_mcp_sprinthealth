@@ -1,40 +1,29 @@
-name: jira-mcp-server
-description: "Transform your Jira sprint data into actionable insights with interactive dashboards that track burndown charts, team velocity, sprint goal progress, and blocked issues."
-version: "2.0.0"
+runtime: "container"
 
-# Build configuration
 build:
-  dockerfile: Dockerfile
-  context: .
-  
-# Runtime configuration
-runtime:
-  port: 3000
+  dockerfile: "Dockerfile"
+  dockerBuildPath: "."
 
-# Environment variables
-environment:
-  NODE_ENV: production
-  PORT: "3000"
-  MODE: http
+startCommand:
+  type: "stdio"
+  configSchema:
+    type: "object"
+    properties:
+      jiraBaseUrl:
+        type: "string"
+        title: "Jira Base URL"
+        description: "Base URL for your Jira instance (e.g., https://company.atlassian.net)"
+      jiraEmail:
+        type: "string"
+        title: "Jira Email"
+        description: "Email address for Jira authentication"
+      jiraApiToken:
+        type: "string"
+        title: "Jira API Token"
+        description: "API token for Jira authentication"
+    required: ["jiraBaseUrl", "jiraEmail", "jiraApiToken"]
 
-# Health check
-healthCheck:
-  path: /health
-  port: 3000
-
-# Resource limits
-resources:
-  memory: 512Mi
-  cpu: 500m
-
-# Tags for discoverability
-tags:
-  - jira
-  - project-management
-  - sprint
-  - agile
-  - dashboard
-  - analytics
-  - burndown
-  - velocity
-  - atlassian
+exampleConfig:
+  jiraBaseUrl: "https://your-company.atlassian.net"
+  jiraEmail: "user@company.com"
+  jiraApiToken: "your-api-token-here"

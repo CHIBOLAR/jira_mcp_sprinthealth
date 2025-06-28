@@ -1,52 +1,30 @@
 #!/bin/bash
 
 # 🐳 Docker Entrypoint for Jira MCP Server (Smithery Compatible)
-# Supports both HTTP and MCP modes with flexible environment handling
+# Handles STDIO mode for MCP communication
 
 set -e
 
-# Default values
-MODE="${MODE:-stdio}"
-PORT="${PORT:-3000}"
-NODE_ENV="${NODE_ENV:-production}"
-
 echo "🚀 Starting Jira MCP Server..."
-echo "📡 Mode: $MODE"
-echo "🔌 Port: $PORT"
-echo "🌍 Environment: $NODE_ENV"
+
+# Map Smithery config to environment variables
+export JIRA_URL="${jiraBaseUrl:-${JIRA_URL:-https://example.atlassian.net}}"
+export JIRA_EMAIL="${jiraEmail:-${JIRA_EMAIL:-validation@example.com}}"
+export JIRA_API_TOKEN="${jiraApiToken:-${JIRA_API_TOKEN:-validation-token}}"
+
+echo "📡 JIRA URL: $JIRA_URL"
+echo "👤 JIRA Email: $JIRA_EMAIL"
+echo "🔑 JIRA Token: [HIDDEN]"
 
 # Create necessary directories
-mkdir -p /app/logs
-mkdir -p /app/config
+mkdir -p /app/logs /app/config
 
-# Set permissions (only if running as root, otherwise skip)
+# Set permissions if running as root
 if [ "$(id -u)" = "0" ]; then
-    chown -R mcp:nodejs /app/logs 2>/dev/null || true
-    chown -R mcp:nodejs /app/config 2>/dev/null || true
+    chown -R mcp:nodejs /app/logs /app/config 2>/dev/null || true
 fi
 
-# Check if this is a Smithery deployment validation (no JIRA env vars)
-if [ -z "$JIRA_URL" ] && [ -z "$JIRA_EMAIL" ] && [ -z "$JIRA_API_TOKEN" ]; then
-    echo "⚠️  No JIRA credentials found - this might be a deployment validation"
-    echo "💡 For production use, set: JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN"
-    
-    # For deployment validation, start the server with mock credentials
-    export JIRA_URL="https://example.atlassian.net"
-    export JIRA_EMAIL="validation@example.com" 
-    export JIRA_API_TOKEN="validation-token"
-    echo "🔧 Using mock credentials for validation..."
-fi
+echo "✅ Starting MCP server in STDIO mode..."
 
-echo "✅ Environment setup complete"
-
-# Choose execution mode
-case "$MODE" in
-    "http"|"server"|"oauth")
-        echo "🌐 Starting HTTP/OAuth server mode..."
-        exec node dist/oauth-server.js
-        ;;
-    "mcp"|"stdio"|*)
-        echo "📡 Starting MCP stdio mode..."
-        exec node dist/index.js
-        ;;
-esac
+# Start the MCP server in STDIO mode
+exec node dist/index.js
