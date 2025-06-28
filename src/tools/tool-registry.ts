@@ -24,6 +24,11 @@ import { JiraGetVersionsTool } from './configuration/get-versions.js';
 import { JiraGetComponentsTool } from './configuration/get-components.js';
 import { JiraGetProjectRolesTool } from './configuration/get-project-roles.js';
 
+// Bulk Operations - TIER 1 Priority Features
+import { JiraBulkUpdateIssuesTool } from './bulk-operations/bulk-update-issues.js';
+import { JiraBulkTransitionIssuesTool } from './bulk-operations/bulk-transition-issues.js';
+import { JiraSimpleAutoAssignTool } from './bulk-operations/auto-assign-workload.js';
+
 /**
  * Tool definition for MCP server registration
  */
@@ -494,7 +499,146 @@ export class JiraToolRegistry {
     });
 
     // ✅ Phase 1 Complete: Foundation Sprint (18/18 tools implemented)
-    // 🚀 Ready for Phase 2: User & Bulk Operations (10 tools planned)
+    
+    // 🚀 Phase 2A: Bulk Operations - TIER 1 Priority (3/3 tools implemented)
+    this.registerTool('bulk_update_issues', {
+      description: 'Update multiple issues in bulk with comprehensive field support and dry-run capability',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          jql: { 
+            type: 'string', 
+            description: 'JQL query to select issues to update (e.g., "project = PROJ AND status = Open")' 
+          },
+          updates: {
+            type: 'object',
+            properties: {
+              assignee: { type: 'string', description: 'Account ID or "unassigned"' },
+              priority: { type: 'string', description: 'Priority name (High, Medium, Low)' },
+              labels: { type: 'array', items: { type: 'string' }, description: 'Array of labels to set' },
+              summary: { type: 'string', description: 'New summary (use with caution on bulk)' },
+              description: { type: 'string', description: 'New description (use with caution on bulk)' },
+              fixVersion: { type: 'string', description: 'Fix version name' },
+              component: { type: 'string', description: 'Component name' },
+              customFields: { type: 'object', description: 'Custom field updates' }
+            },
+            description: 'Fields to update'
+          },
+          dryRun: { 
+            type: 'boolean', 
+            description: 'Preview changes without applying (default: true)' 
+          },
+          batchSize: { 
+            type: 'number', 
+            description: 'Process in batches (default: 25, max: 50)' 
+          },
+          continueOnError: { 
+            type: 'boolean', 
+            description: 'Continue processing if individual updates fail' 
+          },
+          notifyUsers: { 
+            type: 'boolean', 
+            description: 'Send notifications to watchers (default: false for bulk)' 
+          },
+          addComment: { 
+            type: 'string', 
+            description: 'Optional comment to add to all updated issues' 
+          }
+        },
+        required: ['jql', 'updates']
+      },
+      tool: new JiraBulkUpdateIssuesTool(this.jiraClient)
+    });
+
+    this.registerTool('bulk_transition_issues', {
+      description: 'Transition multiple issues through workflow states in bulk with validation',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          jql: { 
+            type: 'string', 
+            description: 'JQL query to select issues to transition' 
+          },
+          transitionName: { 
+            type: 'string', 
+            description: 'Target transition name (e.g., "In Progress", "Done")' 
+          },
+          comment: { 
+            type: 'string', 
+            description: 'Optional comment to add during transition' 
+          },
+          assigneeId: { 
+            type: 'string', 
+            description: 'Optional assignee to set during transition' 
+          },
+          resolution: { 
+            type: 'string', 
+            description: 'Resolution for closing transitions' 
+          },
+          dryRun: { 
+            type: 'boolean', 
+            description: 'Preview transitions without applying (default: true)' 
+          },
+          batchSize: { 
+            type: 'number', 
+            description: 'Process in batches (default: 20, max: 30)' 
+          },
+          continueOnError: { 
+            type: 'boolean', 
+            description: 'Continue if individual transitions fail' 
+          },
+          notifyUsers: { 
+            type: 'boolean', 
+            description: 'Send notifications to watchers (default: false)' 
+          },
+          validateTransitions: { 
+            type: 'boolean', 
+            description: 'Check if transition is valid for each issue (default: true)' 
+          }
+        },
+        required: ['jql', 'transitionName']
+      },
+      tool: new JiraBulkTransitionIssuesTool(this.jiraClient)
+    });
+
+    this.registerTool('auto_assign_based_on_workload', {
+      description: 'Automatically assign issues based on team workload with intelligent balancing (simplified version)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          projectKey: { 
+            type: 'string', 
+            description: 'Target project for assignment' 
+          },
+          jql: { 
+            type: 'string', 
+            description: 'Optional JQL filter for specific issues (default: unassigned)' 
+          },
+          assignmentStrategy: { 
+            type: 'string', 
+            enum: ['balanced', 'round-robin'],
+            description: 'Assignment strategy to use' 
+          },
+          teamMembers: { 
+            type: 'array', 
+            items: { type: 'string' },
+            description: 'Required: team member account IDs' 
+          },
+          maxAssignmentsPerPerson: { 
+            type: 'number', 
+            description: 'Limit assignments per person' 
+          },
+          dryRun: { 
+            type: 'boolean', 
+            description: 'Preview assignments (default: true)' 
+          }
+        },
+        required: ['projectKey', 'assignmentStrategy', 'teamMembers']
+      },
+      tool: new JiraSimpleAutoAssignTool(this.jiraClient)
+    });
+
+    // 🚀 Ready for Phase 2B: Advanced Dashboard & Analytics (4 tools remaining)
   }
 
   /**
