@@ -1,29 +1,5 @@
-# 🐳 Jira Sprint Dashboard MCP Server - Production Docker Image
-# Multi-stage build for TypeScript compilation
-
-# Build stage - includes devDependencies for TypeScript compilation
-FROM node:18-alpine AS builder
-
-# Install system dependencies for build
-RUN apk add --no-cache bash curl wget bc
-
-# Set working directory
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install ALL dependencies (including devDependencies for building)
-RUN npm ci && npm cache clean --force
-
-# Copy source code
-COPY . .
-
-# Build TypeScript to JavaScript
-RUN npm run build
-
-# Production stage - lean image with only runtime dependencies
-FROM node:18-alpine AS production
+# 🐳 Jira Sprint Dashboard MCP Server - Simplified Production Build
+FROM node:18-alpine
 
 # Install system dependencies
 RUN apk add --no-cache \
@@ -43,20 +19,23 @@ RUN addgroup -g 1001 -S nodejs && \
 # Copy package files
 COPY package*.json ./
 
-# Install ONLY production dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install ALL dependencies (including dev for building)
+RUN npm ci && npm cache clean --force
 
-# Copy built JavaScript from builder stage
-COPY --from=builder --chown=mcp:nodejs /app/dist ./dist
+# Copy source code and configuration
+COPY --chown=mcp:nodejs . .
 
-# Copy necessary runtime files
-COPY --chown=mcp:nodejs cli.js ./
-COPY --chown=mcp:nodejs docker-entrypoint.sh /usr/local/bin/
-COPY --chown=mcp:nodejs docker-healthcheck.sh /usr/local/bin/
+# Build TypeScript
+RUN npm run build
 
-# Set executable permissions
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
-    chmod +x /usr/local/bin/docker-healthcheck.sh
+# Remove devDependencies to reduce image size (but keep built files)
+RUN npm prune --production
+
+# Setup entrypoint scripts
+COPY docker-entrypoint.sh /usr/local/bin/
+COPY docker-healthcheck.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-healthcheck.sh
 
 # Health check for HTTP mode
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
@@ -66,9 +45,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 RUN mkdir -p /app/logs /app/config && \
     chown -R mcp:nodejs /app/logs /app/config
 
-# Clean up unnecessary files
+# Security cleanup
 RUN rm -rf /root/.npm && \
-    rm -rf /tmp/*
+    rm -rf /tmp/* && \
+    find /app -name "*.ts" -not -path "*/node_modules/*" -delete || true
 
 # Switch to non-root user
 USER mcp
@@ -89,5 +69,3 @@ LABEL maintainer="jira-mcp@company.com"
 LABEL version="2.0.0"
 LABEL description="Jira Sprint Dashboard MCP Server - HTTP & MCP modes"
 LABEL org.opencontainers.image.source="https://github.com/CHIBOLAR/jira_mcp_sprinthealth"
-LABEL org.opencontainers.image.documentation="https://github.com/CHIBOLAR/jira_mcp_sprinthealth#readme"
-LABEL org.opencontainers.image.url="https://smithery.ai/new?owner=CHIBOLAR&repo=jira_mcp_sprinthealth"

@@ -46,8 +46,4 @@ alerting:
         - targets:
           # - alertmanager:9093
 
-# Storage configuration
-storage:
-  tsdb:
-    retention_time: "15d"
-    retention_size: "10GB"
+# Storage configuration is handled via command line arguments in docker-compose.yml

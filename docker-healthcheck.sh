@@ -1,19 +1,54 @@
-#!/bin/sh
+#!/bin/bash
 
-# Docker health check script for Jira MCP Server
-# Checks if the server is responding and can connect to Jira
+# 🔍 Docker Health Check for Jira MCP Server
+# Supports both HTTP and MCP modes with comprehensive monitoring
 
 # Configuration
 TIMEOUT=10
 MAX_RETRIES=3
+MODE="${MODE:-http}"
+PORT="${PORT:-3000}"
 
-# Function to check if the server process is running
+# Function to check if the process is running
 check_process() {
-    pgrep -f "node.*dist/index.js" > /dev/null
-    return $?
+    case "$MODE" in
+        "http"|"server"|"oauth")
+            pgrep -f "node.*oauth-server.js" > /dev/null
+            return $?
+            ;;
+        "mcp"|"stdio")
+            pgrep -f "node.*dist/index.js" > /dev/null
+            return $?
+            ;;
+        *)
+            echo "ERROR: Unknown mode: $MODE"
+            return 1
+            ;;
+    esac
 }
 
-# Function to test Jira connection
+# Function to test HTTP server
+test_http_server() {
+    if [ "$MODE" = "http" ] || [ "$MODE" = "server" ] || [ "$MODE" = "oauth" ]; then
+        # Test health endpoint
+        response=$(wget --timeout=$TIMEOUT --tries=1 \
+            "http://localhost:$PORT/health" \
+            -O- 2>/dev/null)
+        
+        if [ $? -eq 0 ]; then
+            echo "OK: HTTP server responding on port $PORT"
+            return 0
+        else
+            echo "ERROR: HTTP server not responding on port $PORT"
+            return 1
+        fi
+    else
+        echo "SKIP: HTTP test not applicable for mode $MODE"
+        return 0
+    fi
+}
+
+# Function to test Jira connection (simplified for container)
 test_jira_connection() {
     if [ -z "$JIRA_URL" ] || [ -z "$JIRA_EMAIL" ] || [ -z "$JIRA_API_TOKEN" ]; then
         echo "ERROR: Missing required environment variables"
@@ -34,27 +69,45 @@ test_jira_connection() {
         echo "OK: Jira connection successful"
         return 0
     else
-        echo "ERROR: Cannot connect to Jira"
-        return 1
+        echo "WARNING: Cannot connect to Jira (may be network/config issue)"
+        return 0  # Don't fail health check for Jira connectivity issues
     fi
 }
 
 # Function to check memory usage
 check_memory() {
-    # Get memory usage percentage
-    MEM_USAGE=$(ps -o pid,ppid,cmd,%mem --sort=-%mem -p $(pgrep -f "node.*dist/index.js") | tail -n +2 | awk '{print $4}' | head -1)
-    
-    if [ -n "$MEM_USAGE" ]; then
-        # Check if memory usage is too high (>80%)
-        if [ $(echo "$MEM_USAGE > 80" | bc 2>/dev/null || echo "0") -eq 1 ]; then
-            echo "WARNING: High memory usage: ${MEM_USAGE}%"
+    # Get memory usage percentage for our process
+    case "$MODE" in
+        "http"|"server"|"oauth")
+            PID=$(pgrep -f "node.*oauth-server.js" | head -1)
+            ;;
+        "mcp"|"stdio")
+            PID=$(pgrep -f "node.*dist/index.js" | head -1)
+            ;;
+        *)
+            echo "WARNING: Unknown mode for memory check"
             return 1
+            ;;
+    esac
+    
+    if [ -n "$PID" ]; then
+        # Get memory usage in KB and convert to percentage (rough estimate)
+        MEM_KB=$(ps -o pid,rss --no-headers -p $PID 2>/dev/null | awk '{print $2}')
+        if [ -n "$MEM_KB" ] && [ "$MEM_KB" -gt 0 ]; then
+            # Rough estimate: if using > 400MB (400000 KB), consider it high
+            if [ "$MEM_KB" -gt 400000 ]; then
+                echo "WARNING: High memory usage: ${MEM_KB}KB"
+                return 1
+            else
+                echo "OK: Memory usage normal: ${MEM_KB}KB"
+                return 0
+            fi
         else
-            echo "OK: Memory usage: ${MEM_USAGE}%"
-            return 0
+            echo "WARNING: Cannot determine memory usage"
+            return 1
         fi
     else
-        echo "WARNING: Cannot determine memory usage"
+        echo "WARNING: Process not found for memory check"
         return 1
     fi
 }
@@ -63,37 +116,43 @@ check_memory() {
 main() {
     echo "=== Jira MCP Server Health Check ==="
     echo "Timestamp: $(date)"
+    echo "Mode: $MODE"
+    echo "Port: $PORT"
     
     # Check if process is running
     if ! check_process; then
-        echo "CRITICAL: MCP Server process not found"
+        echo "CRITICAL: Server process not found"
         exit 1
     fi
     
-    echo "OK: MCP Server process is running"
+    echo "OK: Server process is running"
+    
+    # Test HTTP server if applicable
+    test_http_server
+    HTTP_STATUS=$?
     
     # Check memory usage
     check_memory
     MEM_STATUS=$?
     
-    # Test Jira connection
+    # Test Jira connection (non-critical)
     test_jira_connection
     JIRA_STATUS=$?
     
     # Determine overall health
-    if [ $JIRA_STATUS -eq 0 ]; then
+    if [ $HTTP_STATUS -eq 0 ]; then
         if [ $MEM_STATUS -eq 0 ]; then
-            echo "HEALTHY: All checks passed"
+            echo "HEALTHY: All critical checks passed"
             exit 0
         else
-            echo "DEGRADED: Jira connection OK but high resource usage"
+            echo "DEGRADED: Server running but high resource usage"
             exit 0  # Still considered healthy but with warnings
         fi
     else
-        echo "UNHEALTHY: Cannot connect to Jira"
+        echo "UNHEALTHY: Server not responding"
         exit 1
     fi
 }
 
 # Run health check
-main
+main "$@"

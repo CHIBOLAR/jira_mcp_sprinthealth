@@ -1,0 +1,93 @@
+# 🐳 Jira Sprint Dashboard MCP Server - Production Docker Image
+# Multi-stage build for TypeScript compilation
+
+# Build stage - includes devDependencies for TypeScript compilation
+FROM node:18-alpine AS builder
+
+# Install system dependencies for build
+RUN apk add --no-cache bash curl wget bc
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install ALL dependencies (including devDependencies for building)
+RUN npm ci && npm cache clean --force
+
+# Copy source code
+COPY . .
+
+# Build TypeScript to JavaScript
+RUN npm run build
+
+# Production stage - lean image with only runtime dependencies
+FROM node:18-alpine AS production
+
+# Install system dependencies
+RUN apk add --no-cache \
+    bash \
+    curl \
+    wget \
+    bc \
+    && rm -rf /var/cache/apk/*
+
+# Set working directory
+WORKDIR /app
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S mcp -u 1001
+
+# Copy package files
+COPY package*.json ./
+
+# Install ONLY production dependencies
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy built JavaScript from builder stage
+COPY --from=builder --chown=mcp:nodejs /app/dist ./dist
+
+# Copy necessary runtime files
+COPY --chown=mcp:nodejs cli.js ./
+COPY --chown=mcp:nodejs docker-entrypoint.sh /usr/local/bin/
+COPY --chown=mcp:nodejs docker-healthcheck.sh /usr/local/bin/
+
+# Set executable permissions
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
+    chmod +x /usr/local/bin/docker-healthcheck.sh
+
+# Health check for HTTP mode
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD /usr/local/bin/docker-healthcheck.sh
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/config && \
+    chown -R mcp:nodejs /app/logs /app/config
+
+# Clean up unnecessary files
+RUN rm -rf /root/.npm && \
+    rm -rf /tmp/*
+
+# Switch to non-root user
+USER mcp
+
+# Expose ports
+EXPOSE 3000 3001
+
+# Environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV MODE=http
+
+# Use the entrypoint script
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
+# Labels for better container management
+LABEL maintainer="jira-mcp@company.com"
+LABEL version="2.0.0"
+LABEL description="Jira Sprint Dashboard MCP Server - HTTP & MCP modes"
+LABEL org.opencontainers.image.source="https://github.com/CHIBOLAR/jira_mcp_sprinthealth"
+LABEL org.opencontainers.image.documentation="https://github.com/CHIBOLAR/jira_mcp_sprinthealth#readme"
+LABEL org.opencontainers.image.url="https://smithery.ai/new?owner=CHIBOLAR&repo=jira_mcp_sprinthealth"

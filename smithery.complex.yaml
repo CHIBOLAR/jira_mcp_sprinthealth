@@ -1,0 +1,52 @@
+name: jira-mcp-server
+description: "Jira Sprint Dashboard MCP Server - Advanced analytics and production-ready features"
+version: "2.0.0"
+
+# Build configuration
+build:
+  dockerfile: Dockerfile
+  context: .
+  
+# Runtime configuration
+runtime:
+  # Primary HTTP server port
+  port: 3000
+  
+  # Additional ports for OAuth and health checks
+  additionalPorts:
+    - 3001
+
+# Environment variables
+environment:
+  NODE_ENV: production
+  PORT: "3000"
+  MODE: http
+
+# Health check configuration
+healthCheck:
+  path: /health
+  port: 3000
+  intervalSeconds: 30
+  timeoutSeconds: 10
+  retries: 3
+
+# Resource limits
+resources:
+  memory: 512Mi
+  cpu: 500m
+
+# Scaling configuration
+scaling:
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPU: 70
+
+# Restart policy
+restartPolicy: Always
+
+# Labels for organization
+labels:
+  app: jira-mcp-server
+  version: "2.0.0"
+  environment: production
+  type: mcp-server

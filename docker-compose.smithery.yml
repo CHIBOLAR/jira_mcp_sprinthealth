@@ -1,5 +1,5 @@
-# 🐳 Jira MCP Server - Complete Production Stack
-# Windows/Linux compatible with proper health monitoring
+# 🚀 Jira MCP Server - Smithery Production Ready
+# Core services only for reliable deployment
 
 services:
   # Main Jira MCP Server - HTTP Mode
@@ -32,7 +32,7 @@ services:
     depends_on:
       - redis
     healthcheck:
-      test: ["CMD", "/usr/local/bin/docker-healthcheck.sh"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -74,7 +74,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Prometheus for monitoring
+  # Prometheus for basic monitoring
   prometheus:
     image: prom/prometheus:latest
     container_name: jira-mcp-prometheus
@@ -82,13 +82,11 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus-simple.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
@@ -109,10 +107,8 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     networks:
       - jira-mcp-network
     depends_on:
@@ -122,68 +118,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-  # Cross-platform Node Exporter
-  node-exporter:
-    image: prom/node-exporter:latest
-    container_name: jira-mcp-node-exporter
-    restart: unless-stopped
-    ports:
-      - "9100:9100"
-    # Windows-compatible volume mounting
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
-    command:
-      - '--path.procfs=/host/proc'
-      - '--path.rootfs=/rootfs'
-      - '--path.sysfs=/host/sys'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-      - '--collector.systemd'
-      - '--no-collector.wifi'
-    networks:
-      - jira-mcp-network
-    # Only run on Linux - will be skipped on Windows
-    profiles:
-      - linux-only
-
-  # Lightweight metrics exporter for Windows compatibility
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
-    container_name: jira-mcp-cadvisor
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:rw
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-    networks:
-      - jira-mcp-network
-    # Skip on Windows if Docker Desktop doesn't support it
-    profiles:
-      - monitoring
-
-  # Log aggregator (optional)
-  fluentd:
-    image: fluent/fluentd:v1.16.2-debian-1.0
-    container_name: jira-mcp-fluentd
-    restart: unless-stopped
-    volumes:
-      - ./monitoring/fluentd/fluent.conf:/fluentd/etc/fluent.conf:ro
-      - ./logs:/var/log/jira-mcp:ro
-      - fluentd-data:/var/log/fluentd-buffers
-    ports:
-      - "24224:24224"
-      - "24224:24224/udp"
-    networks:
-      - jira-mcp-network
-    environment:
-      - FLUENTD_CONF=fluent.conf
-    profiles:
-      - logging
 
 networks:
   jira-mcp-network:
@@ -197,12 +131,3 @@ volumes:
     driver: local
   grafana-data:
     driver: local
-  fluentd-data:
-    driver: local
-
-# Health check for the entire stack
-x-healthcheck-common: &healthcheck-common
-  interval: 30s
-  timeout: 10s
-  retries: 3
-  start_period: 60s
