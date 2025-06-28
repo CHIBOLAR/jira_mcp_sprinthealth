@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "jira-dashboard": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\Public\\jira-mcp-mvp\\dist\\index.js"
+      ],
+      "cwd": "C:\\Users\\Public\\jira-mcp-mvp",
+      "env": {
+        "JIRA_URL": "https://your-company.atlassian.net",
+        "JIRA_EMAIL": "your.email@company.com", 
+        "JIRA_API_TOKEN": "your_api_token_here"
+      }
+    }
+  }
+}
