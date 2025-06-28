@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "Enhanced Jira Sprint Dashboard MCP Server - Advanced analytics, predictive insights, and production-ready features",
   "main": "src/index.ts",
+  "module": "./src/index.ts",
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
