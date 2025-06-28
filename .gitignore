@@ -46,3 +46,6 @@ coverage/
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Cleanup - Files removed for Smithery deployment
+cleanup/
