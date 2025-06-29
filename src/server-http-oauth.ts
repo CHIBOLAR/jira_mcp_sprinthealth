@@ -129,13 +129,13 @@ class HttpJiraMCPServerWithOAuth {
             type: 'text',
             text: '🚀 **Jira MCP Server with OAuth - Help Guide**\n\n' +
                   '📋 **Available Tools:**\n\n' +
-                  '1. **initiate_oauth** - Start OAuth authentication flow (browser-based)\n' +
-                  '2. **complete_oauth** - Complete OAuth with authorization code\n' +
-                  '3. **test_jira_connection** - Test authenticated connection\n' +
-                  '4. **jira_get_issue** - Get detailed issue information\n' +
-                  '5. **jira_search** - Search issues with JQL\n' +
-                  '6. **list_projects** - List accessible projects\n' +
-                  '7. **help** - This help guide\n\n' +
+                  '1. **help** - This usage guide (no auth needed)\n' +
+                  '2. **initiate_oauth** - Start OAuth authentication flow\n' +
+                  '3. **complete_oauth** - Complete OAuth with authorization code\n' +
+                  '4. **test_jira_connection** - Test authenticated connection\n' +
+                  '5. **jira_get_issue** - Get detailed issue information\n' +
+                  '6. **jira_search** - Search issues with JQL\n' +
+                  '7. **list_projects** - List accessible projects\n\n' +
                   '🔐 **Authentication Options:**\n' +
                   '• **OAuth (Recommended):** Browser-based, secure, no manual tokens\n' +
                   '• **API Token:** Manual token generation from Atlassian\n\n' +
@@ -309,8 +309,141 @@ class HttpJiraMCPServerWithOAuth {
       }
     );
 
-    // Other tools (get issue, search, list projects) follow similar pattern...
-    // They all use ensureSessionInitialized() which handles OAuth/token auth automatically
+    // Other Jira tools - all use ensureSessionInitialized() for OAuth/token auth
+
+    // Get issue tool
+    this.server.tool('jira_get_issue', 
+      'Get details of a specific Jira issue',
+      {
+        issueKey: z.string().describe('Jira issue key (e.g., "PROJ-123")')
+      },
+      async ({ issueKey }, extra) => {
+        try {
+          const sessionId = extra?.sessionId || 'default';
+          const jiraClient = await this.ensureSessionInitialized(sessionId);
+          const session = this.getSession(sessionId);
+          
+          const issueData = await jiraClient.makeRequest(`/rest/api/3/issue/${issueKey}`);
+          
+          return {
+            content: [{
+              type: 'text',
+              text: '📋 **Issue Details: ' + issueKey + '**\n\n' +
+                    '**Title:** ' + issueData.fields.summary + '\n' +
+                    '**Status:** ' + issueData.fields.status.name + '\n' +
+                    '**Type:** ' + issueData.fields.issuetype.name + '\n' +
+                    '**Reporter:** ' + (issueData.fields.reporter?.displayName || 'Unknown') + '\n' +
+                    '**Assignee:** ' + (issueData.fields.assignee?.displayName || 'Unassigned') + '\n' +
+                    '**Project:** ' + issueData.fields.project.name + '\n' +
+                    '**Created:** ' + new Date(issueData.fields.created).toLocaleDateString() + '\n\n' +
+                    '**Issue URL:** [' + issueKey + '](' + session.config!.companyUrl + '/browse/' + issueKey + ')'
+            }]
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Failed to Get Issue**\n\n' + (error as Error).message + '\n\n💡 Try `initiate_oauth` if not authenticated.'
+            }]
+          };
+        }
+      }
+    );
+
+    // Search issues tool
+    this.server.tool('jira_search', 
+      'Search Jira issues using JQL',
+      {
+        jql: z.string().describe('JQL query string (e.g., "project = PROJ AND status = Open")'),
+        maxResults: z.number().optional().default(10).describe('Maximum number of results to return')
+      },
+      async ({ jql, maxResults }, extra) => {
+        try {
+          const sessionId = extra?.sessionId || 'default';
+          const jiraClient = await this.ensureSessionInitialized(sessionId);
+          
+          const searchResults = await jiraClient.searchIssues(jql, { maxResults });
+          
+          if (searchResults.issues.length === 0) {
+            return {
+              content: [{
+                type: 'text',
+                text: '🔍 **Search Results**\n\n' +
+                      '**Query:** ' + jql + '\n' +
+                      '**Results:** 0 issues found\n\n' +
+                      'Try adjusting your JQL query.'
+              }]
+            };
+          }
+
+          const issueList = searchResults.issues.map(issue => 
+            `• **${issue.key}** - ${issue.fields.summary} (${issue.fields.status.name})`
+          ).join('\n');
+
+          return {
+            content: [{
+              type: 'text',
+              text: '🔍 **Search Results**\n\n' +
+                    '**Query:** ' + jql + '\n' +
+                    '**Found:** ' + searchResults.total + ' issues (showing ' + searchResults.issues.length + ')\n\n' +
+                    '**Issues:**\n' + issueList + '\n\n' +
+                    '💡 Use `jira_get_issue` with any issue key for more details.'
+            }]
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Search Failed**\n\n' + (error as Error).message + '\n\n💡 Try `initiate_oauth` if not authenticated.'
+            }]
+          };
+        }
+      }
+    );
+
+    // List projects tool
+    this.server.tool('list_projects', 
+      'List all accessible Jira projects',
+      {},
+      async (params, extra) => {
+        try {
+          const sessionId = extra?.sessionId || 'default';
+          const jiraClient = await this.ensureSessionInitialized(sessionId);
+          
+          const projects = await jiraClient.getProjects();
+          
+          if (projects.length === 0) {
+            return {
+              content: [{
+                type: 'text',
+                text: '📋 **No Projects Found**\n\nYou don\'t have access to any Jira projects, or none exist in this instance.'
+              }]
+            };
+          }
+
+          const projectList = projects.map(project => 
+            `• **${project.key}** - ${project.name} (${project.projectTypeKey})`
+          ).join('\n');
+
+          return {
+            content: [{
+              type: 'text',
+              text: '📋 **Accessible Projects**\n\n' +
+                    '**Found:** ' + projects.length + ' projects\n\n' +
+                    '**Projects:**\n' + projectList + '\n\n' +
+                    '💡 Use project keys in JQL queries with `jira_search`.'
+            }]
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Failed to List Projects**\n\n' + (error as Error).message + '\n\n💡 Try `initiate_oauth` if not authenticated.'
+            }]
+          };
+        }
+      }
+    );
   }
 
   /**
@@ -331,9 +464,41 @@ class HttpJiraMCPServerWithOAuth {
       res.json({
         status: 'healthy',
         service: 'jira-mcp-sprinthealth',
-        version: '4.0.0',
+        version: '4.1.0',
         features: ['oauth', 'lazy-loading', 'smithery-compatible'],
         timestamp: new Date().toISOString()
+      });
+    });
+
+    // Config schema endpoint (for Smithery compatibility)
+    app.get('/config-schema', (req, res) => {
+      res.json({
+        type: "object",
+        properties: {
+          companyUrl: {
+            type: "string",
+            title: "Company Jira URL",
+            description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+          },
+          userEmail: {
+            type: "string",
+            title: "Your Email",
+            description: "Your work email address"
+          },
+          authMethod: {
+            type: "string",
+            enum: ["oauth", "token"],
+            default: "oauth",
+            title: "Authentication Method",
+            description: "OAuth (browser-based, recommended) or API Token (manual)"
+          },
+          jiraApiToken: {
+            type: "string",
+            title: "Jira API Token (Optional)",
+            description: "Only needed if you choose 'token' auth method"
+          }
+        },
+        required: ["companyUrl", "userEmail", "authMethod"]
       });
     });
 
