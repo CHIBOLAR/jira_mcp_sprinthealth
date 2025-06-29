@@ -30,25 +30,23 @@ export const configSchema = z.object({
 
 export type Config = z.infer<typeof configSchema>;
 
-// Get configuration from environment or defaults
-const config: Config = {
-  companyUrl: process.env.JIRA_URL || process.env.COMPANY_URL || 'https://your-company.atlassian.net',
-  userEmail: process.env.JIRA_EMAIL || process.env.USER_EMAIL || 'user@company.com',
-  authMethod: (process.env.AUTH_METHOD as 'oauth' | 'token') || 'oauth',
-  jiraApiToken: process.env.JIRA_API_TOKEN || undefined
-};
+// Get configuration from environment or defaults (for lazy loading)
+function getConfig(): Config {
+  return {
+    companyUrl: process.env.JIRA_URL || process.env.COMPANY_URL || 'https://your-company.atlassian.net',
+    userEmail: process.env.JIRA_EMAIL || process.env.USER_EMAIL || 'user@company.com',
+    authMethod: (process.env.AUTH_METHOD as 'oauth' | 'token') || 'oauth',
+    jiraApiToken: process.env.JIRA_API_TOKEN || undefined
+  };
+}
 
-// Validate configuration
-try {
-  configSchema.parse(config);
-} catch (error) {
-  console.error('❌ Configuration validation failed:', error);
-  console.error('\n💡 Required environment variables:');
-  console.error('• JIRA_URL or COMPANY_URL - Your Jira instance URL');
-  console.error('• JIRA_EMAIL or USER_EMAIL - Your email address');
-  console.error('• AUTH_METHOD (optional) - "oauth" or "token" (default: oauth)');
-  console.error('• JIRA_API_TOKEN (optional) - API token if using token auth');
-  process.exit(1);
+// Function to validate configuration (called lazily)
+function validateConfiguration(config: Config): void {
+  try {
+    configSchema.parse(config);
+  } catch (error) {
+    throw new Error(`Configuration validation failed: ${error}`);
+  }
 }
 
 /**
@@ -83,9 +81,16 @@ class JiraMCPHttpServer {
 
   /**
    * Initialize components only when needed (lazy loading)
+   * This ensures Smithery can list tools without requiring valid config
    */
   private ensureComponentsInitialized(): void {
     if (this.jiraClient) return; // Already initialized
+
+    // Get configuration lazily
+    const config = getConfig();
+    
+    // Validate configuration only when actually needed
+    validateConfiguration(config);
 
     // Convert config to JiraConfig format
     const jiraConfig: JiraConfig = {
@@ -99,11 +104,18 @@ class JiraMCPHttpServer {
       jiraConfig.apiToken = config.jiraApiToken;
     }
 
-    // Initialize components
-    this.jiraClient = new JiraApiClient(jiraConfig);
-    this.dashboardGenerator = new DashboardGenerator(this.jiraClient);
-    this.analyticsEngine = new AdvancedAnalyticsEngine(this.jiraClient);
-    this.toolRegistry = new JiraToolRegistry(this.jiraClient);
+    try {
+      // Initialize components
+      this.jiraClient = new JiraApiClient(jiraConfig);
+      this.dashboardGenerator = new DashboardGenerator(this.jiraClient);
+      this.analyticsEngine = new AdvancedAnalyticsEngine(this.jiraClient);
+      this.toolRegistry = new JiraToolRegistry(this.jiraClient);
+      
+      console.log('✅ Jira MCP components initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize Jira MCP components:', error);
+      throw new Error(`Component initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**
@@ -629,15 +641,19 @@ class JiraMCPHttpServer {
   }
 
   /**
-   * Enhanced connection test
+   * Enhanced connection test with graceful error handling
    */
   private async testConnectionEnhanced() {
     try {
-      if (!this.jiraClient) throw new Error('Components not initialized');
+      // Initialize components (this will validate config)
+      this.ensureComponentsInitialized();
+      
+      if (!this.jiraClient) throw new Error('Failed to initialize Jira client');
       
       const isConnected = await this.jiraClient.testConnection();
       
       if (isConnected) {
+        const config = getConfig();
         return {
           content: [{
             type: 'text' as const,
@@ -652,6 +668,10 @@ class JiraMCPHttpServer {
                   '• ✅ Configuration & Metadata (9 tools): issue types, priorities, statuses, projects, custom fields\n' +
                   '• ✅ Bulk Operations (3 tools): bulk updates, bulk transitions, auto-assignment\n' +
                   '• 📊 Sprint Health Dashboard (7 tools): connection test, projects, burndown, velocity, goal progress, blocked issues, comprehensive dashboard\n\n' +
+                  `🔧 **Current Configuration:**\n` +
+                  `• Company URL: ${config.companyUrl}\n` +
+                  `• User Email: ${config.userEmail}\n` +
+                  `• Auth Method: ${config.authMethod}\n\n` +
                   '💡 **Ready for comprehensive Jira automation with sprint health insights!**'
           }]
         };
@@ -659,26 +679,59 @@ class JiraMCPHttpServer {
         return {
           content: [{
             type: 'text' as const,
-            text: '❌ **Jira Connection Failed**\n\nPlease check your credentials and instance URL.'
+            text: '❌ **Jira Connection Failed**\n\nThe connection test failed. Please verify:\n\n' +
+                  '• Your Jira URL is correct and accessible\n' +
+                  '• Your credentials are valid\n' +
+                  '• Your Jira instance is online\n' +
+                  '• Network connectivity is working'
           }]
         };
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Provide helpful configuration guidance
+      if (errorMessage.includes('Configuration validation failed')) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: '❌ **Configuration Error**\n\n' +
+                  'Please set the required environment variables:\n\n' +
+                  '**Required:**\n' +
+                  '• `JIRA_URL` or `COMPANY_URL` - Your Jira instance URL\n' +
+                  '• `JIRA_EMAIL` or `USER_EMAIL` - Your email address\n\n' +
+                  '**Optional:**\n' +
+                  '• `AUTH_METHOD` - "oauth" (default) or "token"\n' +
+                  '• `JIRA_API_TOKEN` - API token if using token auth\n\n' +
+                  '💡 **Example:**\n' +
+                  '```\n' +
+                  'JIRA_URL=https://yourcompany.atlassian.net\n' +
+                  'JIRA_EMAIL=your.email@company.com\n' +
+                  'AUTH_METHOD=oauth\n' +
+                  '```'
+          }]
+        };
+      }
+      
       return {
         content: [{
           type: 'text' as const,
-          text: `❌ **Connection Error**: ${error instanceof Error ? error.message : 'Unknown error'}`
+          text: `❌ **Connection Error**: ${errorMessage}\n\n` +
+                'Please check your configuration and try again.'
         }]
       };
     }
   }
 
   /**
-   * Enhanced project listing
+   * Enhanced project listing with graceful error handling
    */
   private async listProjectsEnhanced() {
     try {
-      if (!this.jiraClient) throw new Error('Components not initialized');
+      // Initialize components (this will validate config)
+      this.ensureComponentsInitialized();
+      
+      if (!this.jiraClient) throw new Error('Failed to initialize Jira client');
       
       const projects = await this.jiraClient.getProjects();
       
@@ -746,6 +799,7 @@ class JiraMCPHttpServer {
       // Health check endpoint
       if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
+        const config = getConfig();
         res.end(JSON.stringify({
           status: 'healthy',
           service: 'jira-mcp-server',
@@ -755,7 +809,15 @@ class JiraMCPHttpServer {
             companyUrl: config.companyUrl,
             userEmail: config.userEmail,
             authMethod: config.authMethod,
-            hasApiToken: !!config.jiraApiToken
+            hasApiToken: !!config.jiraApiToken,
+            configValid: (() => {
+              try {
+                validateConfiguration(config);
+                return true;
+              } catch {
+                return false;
+              }
+            })()
           }
         }));
         return;
@@ -808,9 +870,9 @@ class JiraMCPHttpServer {
             <h1>🚀 Jira MCP HTTP Server</h1>
             <div class="status">
               <strong>✅ Server is running and ready!</strong><br>
-              Company: ${config.companyUrl}<br>
-              User: ${config.userEmail}<br>
-              Auth: ${config.authMethod.toUpperCase()}
+              Lazy loading enabled for Smithery compatibility<br>
+              Configuration validation: On-demand<br>
+              29 comprehensive Jira tools available
             </div>
             
             <h2>📋 Available Endpoints</h2>
@@ -894,12 +956,13 @@ class JiraMCPHttpServer {
         console.log(`🔗 WebSocket URL: ws://${HOST}:${PORT}/mcp`);
         console.log(`💡 Health Check: http://${HOST}:${PORT}/health`);
         console.log(`📋 Server Info: http://${HOST}:${PORT}/info`);
-        console.log('\n⚙️  Configuration:');
-        console.log(`   Company URL: ${config.companyUrl}`);
-        console.log(`   User Email: ${config.userEmail}`);
-        console.log(`   Auth Method: ${config.authMethod}`);
-        console.log(`   API Token: ${config.jiraApiToken ? '✅ Configured' : '❌ Not set'}`);
+        console.log('\n⚙️  Features:');
+        console.log('   ✅ Lazy loading enabled for Smithery compatibility');
+        console.log('   🛠️ 29 comprehensive Jira tools available');
+        console.log('   📊 Sprint health dashboard and analytics');
+        console.log('   🔧 Dynamic configuration validation');
         console.log('\n✅ Ready to serve Smithery requests!');
+        console.log('💡 Configuration will be validated when tools are first used');
         resolve();
       });
     });
