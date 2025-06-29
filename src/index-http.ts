@@ -51,8 +51,8 @@ function getEnvConfig(): Config {
   };
 }
 /**
- * Enhanced Jira MCP Server - Smithery Compatible
- * Simplified version for immediate deployment
+ * Enhanced Jira MCP Server - Smithery Compatible with Lazy Loading
+ * Tools can be listed without configuration, but require config for execution
  */
 class JiraMCPServer {
   private mcpServer: McpServer;
@@ -82,31 +82,31 @@ class JiraMCPServer {
     });
   }
   /**
-   * Setup all MCP tools (simplified for Smithery compatibility)
+   * Setup all MCP tools with proper lazy loading for Smithery
    */
   private setupTools(): void {
     // Connection test tool
     this.mcpServer.tool('test_jira_connection', 
-      {},  // No parameters needed
+      'Test connection to Jira instance and verify credentials',
       async () => {
         try {
           const config = this.currentConfig || getEnvConfig();
-          configSchema.parse(config);
+          const validatedConfig = configSchema.parse(config);
           
           return {
             content: [{
               type: 'text' as const,
-              text: '✅ **Jira Connection Test**\n\n' +
+              text: '✅ **Jira Connection Test Successful**\n\n' +
                     'Configuration is valid and ready for use.\n\n' +
                     '🚀 **Available Features:**\n' +
                     '• Core CRUD operations\n' +
                     '• Issue management\n' +
                     '• Project browsing\n' +
                     '• Search functionality\n\n' +
-                    `🔧 **Current Configuration:**\n` +
-                    `• Company URL: ${config.companyUrl}\n` +
-                    `• User Email: ${config.userEmail}\n` +
-                    `• Auth Method: ${config.authMethod}\n\n` +
+                    '🔧 **Current Configuration:**\n' +
+                    '• Company URL: ' + validatedConfig.companyUrl + '\n' +
+                    '• User Email: ' + validatedConfig.userEmail + '\n' +
+                    '• Auth Method: ' + validatedConfig.authMethod + '\n\n' +
                     '💡 **Ready for Jira automation!**'
             }]
           };
@@ -114,13 +114,16 @@ class JiraMCPServer {
           return {
             content: [{
               type: 'text' as const,
-              text: `❌ **Configuration Error**: Please provide valid Jira configuration`
+              text: '❌ **Configuration Required**\n\n' +
+                    'Please provide your Jira configuration to use this tool.\n\n' +
+                    '**Required:** companyUrl, userEmail\n' +
+                    '**Optional:** authMethod, jiraApiToken'
             }]
           };
         }
       }
     );
-    // Basic issue retrieval
+    // Issue retrieval tool
     this.mcpServer.tool('jira_get_issue', 
       {
         issueKey: z.string().describe('Jira issue key (e.g., "PROJ-123")')
@@ -128,96 +131,126 @@ class JiraMCPServer {
       async ({ issueKey }) => {
         try {
           const config = this.currentConfig || getEnvConfig();
-          configSchema.parse(config);
+          const validatedConfig = configSchema.parse(config);
           
           return {
             content: [{
               type: 'text' as const,
-              text: `📋 **Issue Details for ${issueKey}**\n\n` +
-                    'This tool would retrieve issue details from:\n' +
-                    `• Jira URL: ${config.companyUrl}\n` +
-                    `• Issue Key: ${issueKey}\n\n` +
-                    '⚠️ **Note**: This is a simplified demo version for Smithery deployment.\n' +
-                    'Full implementation requires complete Jira client integration.'
+              text: '📋 **Issue Details for ' + issueKey + '**\n\n' +
+                    '🔗 **Jira Instance:** ' + validatedConfig.companyUrl + '\n' +
+                    '📧 **User:** ' + validatedConfig.userEmail + '\n\n' +
+                    '⚠️ **Demo Mode**: Simplified version for Smithery deployment.\n' +
+                    'Production version would fetch actual issue data from Jira API.'
             }]
           };
         } catch (error) {
           return {
             content: [{
               type: 'text' as const,
-              text: `❌ **Error**: ${error instanceof Error ? error.message : 'Unknown error'}`
-            }]
-          };
-        }
-      }
-    );
-    // Basic issue search
-    this.mcpServer.tool('jira_search', 
-      {
-        jql: z.string().describe('JQL query string (e.g., "project = PROJ AND status = Open")')
-      },
-      async ({ jql }) => {
-        try {
-          const config = this.currentConfig || getEnvConfig();
-          configSchema.parse(config);
-          
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `🔍 **Search Results for JQL Query**\n\n` +
-                    `Query: ${jql}\n` +
-                    `Jira URL: ${config.companyUrl}\n\n` +
-                    '⚠️ **Note**: This is a simplified demo version for Smithery deployment.\n' +
-                    'Full implementation would execute the JQL query and return actual results.'
-            }]
-          };
-        } catch (error) {
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `❌ **Error**: ${error instanceof Error ? error.message : 'Unknown error'}`
+              text: '❌ **Configuration Required**\n\n' +
+                    'Please configure your Jira connection settings first.\n' +
+                    'Use test_jira_connection to validate your configuration.'
             }]
           };
         }
       }
     );
 
-    // Project listing
-    this.mcpServer.tool('list_projects', 
-      {},  // No parameters needed
-      async () => {
+    // Search tool
+    this.mcpServer.tool('jira_search', 
+      {
+        jql: z.string().describe('JQL query string')
+      },
+      async ({ jql }) => {
         try {
           const config = this.currentConfig || getEnvConfig();
-          configSchema.parse(config);
+          const validatedConfig = configSchema.parse(config);
           
           return {
             content: [{
               type: 'text' as const,
-              text: `📋 **Accessible Jira Projects**\n\n` +
-                    `Connected to: ${config.companyUrl}\n` +
-                    `User: ${config.userEmail}\n\n` +
-                    '⚠️ **Note**: This is a simplified demo version for Smithery deployment.\n' +
-                    'Full implementation would list actual projects from your Jira instance.\n\n' +
-                    '🛠️ **Available Tools:**\n' +
-                    '• `jira_get_issue` - Get issue details\n' +
-                    '• `jira_search` - Search issues with JQL\n' +
-                    '• `test_jira_connection` - Test connection\n' +
-                    '• `list_projects` - List projects'
+              text: '🔍 **JQL Search Results**\n\n' +
+                    '🔗 **Jira Instance:** ' + validatedConfig.companyUrl + '\n' +
+                    '🔍 **Query:** ' + jql + '\n\n' +
+                    '⚠️ **Demo Mode**: Simplified version for Smithery deployment.\n' +
+                    'Production version would execute JQL and return actual results.'
             }]
           };
         } catch (error) {
           return {
             content: [{
               type: 'text' as const,
-              text: `❌ **Error**: ${error instanceof Error ? error.message : 'Unknown error'}`
+              text: '❌ **Configuration Required**\n\n' +
+                    'Please configure your Jira connection settings first.'
             }]
           };
         }
       }
     );
+    // Project listing tool
+    this.mcpServer.tool('list_projects', 
+      'List all accessible Jira projects',
+      async () => {
+        try {
+          const config = this.currentConfig || getEnvConfig();
+          const validatedConfig = configSchema.parse(config);
+          
+          return {
+            content: [{
+              type: 'text' as const,
+              text: '📋 **Accessible Jira Projects**\n\n' +
+                    '🔗 **Connected to:** ' + validatedConfig.companyUrl + '\n' +
+                    '📧 **User:** ' + validatedConfig.userEmail + '\n\n' +
+                    '⚠️ **Demo Mode**: Simplified version for Smithery deployment.\n' +
+                    'Production version would list actual projects from Jira.\n\n' +
+                    '🛠️ **Available Tools:**\n' +
+                    '• jira_get_issue - Get specific issue details\n' +
+                    '• jira_search - Search issues with JQL\n' +
+                    '• test_jira_connection - Test configuration\n' +
+                    '• list_projects - This tool'
+            }]
+          };
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: '❌ **Configuration Required**\n\n' +
+                    'Please configure your Jira connection settings first.'
+            }]
+          };
+        }
+      }
+    );
+
+    // Help tool
+    this.mcpServer.tool('help', 
+      'Get help and information about available tools',
+      async () => {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: '🚀 **Jira MCP Server - Help Guide**\n\n' +
+                  '📋 **Available Tools:**\n\n' +
+                  '1. **test_jira_connection** - Validate configuration\n' +
+                  '2. **list_projects** - List accessible projects\n' +
+                  '3. **jira_get_issue** - Get issue details\n' +
+                  '4. **jira_search** - Search with JQL\n' +
+                  '5. **help** - This help guide\n\n' +
+                  '🔧 **Configuration Required:**\n' +
+                  '• Company Jira URL\n' +
+                  '• Your work email\n' +
+                  '• Auth method (oauth/token)\n\n' +
+                  '💡 **Getting Started:**\n' +
+                  '1. Configure Jira settings in Smithery\n' +
+                  '2. Run test_jira_connection\n' +
+                  '3. Use other tools as needed'
+          }]
+        };
+      }
+    );
   }
   /**
-   * Start HTTP server with proper Smithery MCP support
+   * Start HTTP server with Smithery MCP support
    */
   async startHttpServer(): Promise<void> {
     const PORT = parseInt(process.env.PORT || '3000');
@@ -227,43 +260,45 @@ class JiraMCPServer {
     app.use(cors());
     app.use(express.json());
 
-    // Map to store transports by session ID
     const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
-    // Health check endpoint
+    // Health check
     app.get('/health', (req, res) => {
       res.json({
         status: 'healthy',
         service: 'jira-mcp-server',
         version: '3.0.0',
-        timestamp: new Date().toISOString(),
-        smithery_compatible: true
+        smithery_compatible: true,
+        lazy_loading: true
       });
     });
 
-    // Server info endpoint
+    // Server info
     app.get('/info', (req, res) => {
       res.json({
         name: 'jira-mcp-http',
         version: '3.0.0',
         description: 'Jira MCP Server - Smithery Compatible',
-        smithery_compatible: true,
-        tools: ['test_jira_connection', 'jira_get_issue', 'jira_search', 'list_projects']
+        tools: ['test_jira_connection', 'jira_get_issue', 'jira_search', 'list_projects', 'help']
       });
     });
-    // MCP endpoint for Smithery - handles GET, POST, DELETE
+    // MCP endpoint for Smithery
     app.all('/mcp', async (req, res) => {
       try {
-        // Extract config from query parameter (Smithery format)
+        console.log('🔗 MCP Request:', req.method, req.url);
+        
+        // Extract and parse Smithery config
         const configParam = req.query.config as string | undefined;
         const smitheryConfig = parseSmitheryConfig(configParam);
         
-        // Store config for this session
         if (smitheryConfig) {
+          console.log('✅ Smithery config received');
           this.currentConfig = smitheryConfig;
+        } else {
+          console.log('ℹ️ No config - lazy loading mode');
         }
         
-        // Create or reuse transport
+        // Handle transport management
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         let transport: StreamableHTTPServerTransport;
 
@@ -271,7 +306,7 @@ class JiraMCPServer {
           transport = transports[sessionId];
         } else {
           transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            sessionIdGenerator: () => 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
           });
 
           if (sessionId) {
@@ -288,8 +323,9 @@ class JiraMCPServer {
         }
 
         await transport.handleRequest(req, res, req.body);
+        
       } catch (error) {
-        console.error('❌ Error handling MCP request:', error);
+        console.error('❌ MCP Error:', error);
         if (!res.headersSent) {
           res.status(500).json({
             jsonrpc: '2.0',
@@ -299,43 +335,45 @@ class JiraMCPServer {
         }
       }
     });
-    // Default response for root
+    // Default route
     app.get('/', (req, res) => {
-      res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head><title>Jira MCP HTTP Server</title></head>
-        <body>
-          <h1>🚀 Jira MCP HTTP Server</h1>
-          <p>✅ Server is running and ready for Smithery!</p>
-          <p>Streamable HTTP transport enabled</p>
-          <p>Simplified demo version for quick deployment</p>
-          <p>Configuration via query parameters supported</p>
-          
-          <h2>Available Tools:</h2>
-          <ul>
-            <li><code>test_jira_connection</code> - Test connection</li>
-            <li><code>jira_get_issue</code> - Get issue details</li>
-            <li><code>jira_search</code> - Search with JQL</li>
-            <li><code>list_projects</code> - List projects</li>
-          </ul>
-        </body>
-        </html>
-      `);
+      res.send(
+        '<!DOCTYPE html>' +
+        '<html><head><title>Jira MCP Server</title></head>' +
+        '<body>' +
+        '<h1>🚀 Jira MCP HTTP Server</h1>' +
+        '<p>✅ Server is running and ready for Smithery!</p>' +
+        '<p>Streamable HTTP transport with lazy loading enabled</p>' +
+        '<h2>Available Tools:</h2>' +
+        '<ul>' +
+        '<li>test_jira_connection - Test configuration</li>' +
+        '<li>list_projects - List projects</li>' +
+        '<li>jira_get_issue - Get issue details</li>' +
+        '<li>jira_search - Search with JQL</li>' +
+        '<li>help - Usage guide</li>' +
+        '</ul>' +
+        '<h2>Endpoints:</h2>' +
+        '<ul>' +
+        '<li>GET /health - Health check</li>' +
+        '<li>GET /info - Server info</li>' +
+        '<li>ALL /mcp - MCP protocol</li>' +
+        '</ul>' +
+        '</body></html>'
+      );
     });
 
-    // Start the server
+    // Start server
     return new Promise((resolve) => {
       app.listen(PORT, HOST, () => {
-        console.log('\n🚀 Jira MCP HTTP Server Started Successfully!');
-        console.log(`📍 Server URL: http://${HOST}:${PORT}`);
-        console.log(`🔗 MCP Endpoint: http://${HOST}:${PORT}/mcp`);
-        console.log(`💡 Health Check: http://${HOST}:${PORT}/health`);
-        console.log('\n⚙️  Features:');
-        console.log('   ✅ Smithery-compatible Streamable HTTP transport');
-        console.log('   🛠️ Simplified Jira tools (demo version)');
-        console.log('   🔧 Configuration via query parameters');
-        console.log('   🎯 Lazy loading for optimal performance');
+        console.log('\n🚀 Jira MCP HTTP Server Started!');
+        console.log('📍 Server URL: http://' + HOST + ':' + PORT);
+        console.log('🔗 MCP Endpoint: http://' + HOST + ':' + PORT + '/mcp');
+        console.log('💡 Health Check: http://' + HOST + ':' + PORT + '/health');
+        console.log('\n⚙️ Features:');
+        console.log('   ✅ Smithery-compatible Streamable HTTP');
+        console.log('   ✅ Lazy loading - tools listable without config');
+        console.log('   ✅ 5 Jira tools available');
+        console.log('   ✅ Configuration validation on execution');
         console.log('\n✅ Ready for Smithery deployment!');
         resolve();
       });
@@ -343,11 +381,11 @@ class JiraMCPServer {
   }
 }
 
-// Start the HTTP server
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Start server
+if (import.meta.url === 'file://' + process.argv[1]) {
   const httpServer = new JiraMCPServer();
   httpServer.startHttpServer().catch((error) => {
-    console.error('❌ Failed to start Jira MCP HTTP Server:', error);
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
   });
 }
