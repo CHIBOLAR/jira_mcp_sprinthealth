@@ -3,32 +3,4 @@ version: 4.1.0
 description: "Jira MCP Server with OAuth Browser Authentication - TypeScript Runtime"
 
 runtime: "typescript"
-entrypoint: "src/server-http-oauth.ts"
-
-configSchema:
-  type: "object"
-  properties:
-    companyUrl:
-      type: "string"
-      title: "Company Jira URL"
-      description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
-    userEmail:
-      type: "string"
-      title: "Your Email"  
-      description: "Your work email address"
-    authMethod:
-      type: "string"
-      enum: ["oauth", "token"]
-      default: "oauth"
-      title: "Authentication Method"
-      description: "OAuth (browser-based, recommended) or API Token (manual)"
-    jiraApiToken:
-      type: "string"
-      title: "Jira API Token (Optional)"
-      description: "Only needed if you choose 'token' auth method. Get from: https://id.atlassian.com/manage-profile/security/api-tokens"
-  required: ["companyUrl", "userEmail", "authMethod"]
-
-exampleConfig:
-  companyUrl: "https://your-company.atlassian.net"
-  userEmail: "your.email@company.com"
-  authMethod: "oauth"
+entrypoint: "src/index.ts"
