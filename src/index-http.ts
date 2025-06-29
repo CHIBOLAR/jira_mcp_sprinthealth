@@ -541,7 +541,7 @@ class JiraMCPHttpServer {
   }
 
   /**
-   * Setup MCP tool handlers using the new SDK
+   * Setup MCP tool handlers
    */
   private setupToolHandlers(): void {
     const tools = this.getToolDefinitions();
@@ -767,12 +767,7 @@ class JiraMCPHttpServer {
         }]
       };
     } catch (error) {
-      return {
-        content: [{
-          type: 'text' as const,
-          text: `❌ **Error listing projects**: ${error instanceof Error ? error.message : 'Unknown error'}`
-        }]
-      };
+      throw error;
     }
   }
 
@@ -842,8 +837,89 @@ class JiraMCPHttpServer {
           endpoints: {
             health: '/health',
             info: '/info',
+            config: '/config',
+            tools: '/tools',
             mcp: '/mcp (WebSocket)'
           }
+        }));
+        return;
+      }
+
+      // Config schema endpoint for Smithery
+      if (req.url === '/config') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          configSchema: {
+            type: "object",
+            properties: {
+              companyUrl: {
+                type: "string",
+                title: "Company Jira URL",
+                description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+              },
+              userEmail: {
+                type: "string",
+                title: "Your Email",
+                description: "Your work email address"
+              },
+              authMethod: {
+                type: "string",
+                enum: ["oauth", "token"],
+                default: "oauth",
+                description: "OAuth (recommended) or API Token (fallback)"
+              },
+              jiraApiToken: {
+                type: "string",
+                description: "Only needed if OAuth fails. Get from: https://id.atlassian.com/manage-profile/security/api-tokens"
+              }
+            },
+            required: ["companyUrl", "userEmail"]
+          },
+          exampleConfig: {
+            companyUrl: "https://your-company.atlassian.net",
+            userEmail: "user@company.com"
+          }
+        }));
+        return;
+      }
+
+      // Alternative config schema endpoint that Smithery might expect
+      if (req.url === '/config-schema') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          type: "object",
+          properties: {
+            companyUrl: {
+              type: "string",
+              title: "Company Jira URL",
+              description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+            },
+            userEmail: {
+              type: "string",
+              title: "Your Email",
+              description: "Your work email address"
+            },
+            authMethod: {
+              type: "string",
+              enum: ["oauth", "token"],
+              default: "oauth",
+              description: "OAuth (recommended) or API Token (fallback)"
+            },
+            jiraApiToken: {
+              type: "string",
+              description: "Only needed if OAuth fails. Get from: https://id.atlassian.com/manage-profile/security/api-tokens"
+            }
+          },
+          required: ["companyUrl", "userEmail"]
+        }));
+        return;
+      }
+
+      // Tools endpoint for Smithery
+      if (req.url === '/tools') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          tools: this.getToolDefinitions()
         }));
         return;
       }
@@ -914,8 +990,24 @@ class JiraMCPHttpServer {
     wss.on('connection', async (ws) => {
       console.log('🔗 New MCP WebSocket connection established');
       
-      // Create stdio transport that works over WebSocket
-      const transport = new StdioServerTransport();
+      // Create a proper WebSocket transport that implements the Transport interface
+      const transport = {
+        onMessage: null as ((message: any) => void) | null,
+        send: async (message: any) => {
+          if (ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify(message));
+          }
+        },
+        start: async () => {
+          console.log('🚀 WebSocket transport started');
+        },
+        close: async () => {
+          console.log('🔌 WebSocket transport closed');
+        }
+      };
+      
+      // Connect the MCP server to the transport
+      await this.server.connect(transport);
       
       // Handle WebSocket messages
       ws.on('message', async (data) => {
@@ -923,12 +1015,10 @@ class JiraMCPHttpServer {
           const message = JSON.parse(data.toString());
           console.log('📨 Received MCP message:', message.method || 'unknown');
           
-          // This is a simplified bridge - in production you'd want a proper transport layer
-          ws.send(JSON.stringify({
-            jsonrpc: '2.0',
-            id: message.id,
-            result: { message: 'MCP server received your request' }
-          }));
+          // Forward the message to the MCP server through the transport
+          if (transport.onMessage) {
+            transport.onMessage(message);
+          }
         } catch (error) {
           console.error('❌ Error handling MCP message:', error);
           ws.send(JSON.stringify({
@@ -941,6 +1031,7 @@ class JiraMCPHttpServer {
       
       ws.on('close', () => {
         console.log('🔌 MCP WebSocket connection closed');
+        transport.close();
       });
       
       ws.on('error', (error) => {

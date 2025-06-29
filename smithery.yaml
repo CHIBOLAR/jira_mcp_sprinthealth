@@ -13,8 +13,17 @@ startCommand:
         type: "string"
         title: "Your Email"
         description: "Your work email address"
+      authMethod:
+        type: "string"
+        enum: ["oauth", "token"]
+        default: "oauth"
+        description: "OAuth (recommended) or API Token (fallback)"
+      jiraApiToken:
+        type: "string"
+        description: "Only needed if OAuth fails. Get from: https://id.atlassian.com/manage-profile/security/api-tokens"
     required: ["companyUrl", "userEmail"]
 
 exampleConfig:
   companyUrl: "https://your-company.atlassian.net"
   userEmail: "user@company.com"
+  authMethod: "oauth"
