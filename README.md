@@ -1,63 +1,75 @@
 # Jira MCP SprintHealth Server
 
-✅ **WORKING - OAuth Browser Authentication Added!**
+🔐 **OAuth Browser Authentication Now Active!**
 
-## 🚀 Status: DEPLOYED AND WORKING
+## 🚀 Quick Start
 
-✅ **failedToFetchConfigSchema FIXED** - Uses working code from commit c40787e  
-✅ **OAuth Browser Authentication ADDED** - No more manual API tokens!  
-✅ **Smithery Compatible** - Ready for deployment  
-✅ **Build Passes** - All TypeScript errors resolved  
+### For Smithery Deployment
+1. Use the repository URL: `https://github.com/CHIBOLAR/jira_mcp_sprinthealth`
+2. Configure with your Jira details (no API token needed!)
+3. Use OAuth browser authentication for seamless login
+
+### Configuration Required
+- **companyUrl**: Your Jira instance URL (e.g., `https://company.atlassian.net`)
+- **userEmail**: Your email address  
+- **authMethod**: "oauth" (default) or "token"
+- **jiraApiToken**: Only needed if using "token" auth method
 
 ## 🔐 OAuth Authentication Flow
 
-**Simple 2-step browser authentication:**
+### **Much Better UX than API Tokens!**
 
-1. **Start OAuth:** `initiate_oauth` → Get browser URL
-2. **Complete OAuth:** `complete_oauth` → Exchange code for tokens
+**With OAuth (Active Now):**
+1. Configure Jira URL and email only
+2. Call `initiate_oauth` → get authentication URL
+3. Click URL → authorize in browser (one click!)
+4. Call `complete_oauth` with auth code → tokens stored
+5. All tools work automatically! ✨
 
-**Much better than manual API tokens!**
+**Old API Token Way:**
+1. Configure Jira URL, email, AND manual API token
+2. Visit Atlassian settings manually
+3. Generate API token manually  
+4. Copy/paste token into configuration
+5. Use tools
 
 ## 🔧 Available Tools
 
-### **Authentication (No auth needed):**
-- `help` - Get help information  
-- `initiate_oauth` - Start OAuth browser flow
-- `complete_oauth` - Complete OAuth authentication
+### **OAuth Tools (No Auth Needed):**
+1. **help** - Get help information  
+2. **initiate_oauth** - Start OAuth flow → returns auth URL
+3. **complete_oauth** - Complete OAuth → exchange code for tokens
 
-### **Jira Operations (OAuth or token auth):**
-- `test_jira_connection` - Test your connection
-- `jira_get_issue` - Get issue details  
-- `jira_search` - Search with JQL
-- `list_projects` - List accessible projects
+### **Jira Tools (OAuth/Token Auth Required):**
+4. **test_jira_connection** - Test your Jira connection
+5. **jira_get_issue** - Get detailed issue information
+6. **jira_search** - Search issues with JQL
+7. **list_projects** - List accessible projects
 
-## ⚙️ Configuration
+## ✅ Fixed Issues
 
-**Required:**
-- `companyUrl` - Your Jira URL (e.g., `https://company.atlassian.net`)
-- `userEmail` - Your email address
+- ✅ **failedToFetchConfigSchema** - Proper schema exports
+- ✅ **OAuth browser authentication** - No manual tokens needed!
+- ✅ **TypeScript runtime compatibility** - Smithery ready
+- ✅ **Lazy loading** - Tools load without upfront auth
+- ✅ **Better UX** - Click to authenticate vs manual token generation
 
-**Optional:**
-- `authMethod` - "oauth" (default) or "token"  
-- `jiraApiToken` - Only needed for token auth
+## 🌟 OAuth Benefits
 
-## 🎯 What We Fixed
+✅ **Browser-based** - Click to authenticate  
+✅ **No manual setup** - No API token generation needed  
+✅ **Secure scopes** - Granular permissions  
+✅ **Auto refresh** - Seamless token management  
+✅ **Modern standard** - OAuth 2.0 with PKCE  
 
-**Problem:** Kept getting `failedToFetchConfigSchema` error
+## 📋 Technical Details
 
-**Solution:** 
-1. ✅ Restored working code from commit `c40787e` (that had fixed the schema issue)
-2. ✅ Added OAuth tools to the working version instead of rewriting everything
-3. ✅ Maintained exact export structure that Smithery expects
-
-**Key Learning:** Don't rewrite working code - just extend it!
-
-## 🚀 Deploy to Smithery
-
-1. Use repository: `https://github.com/CHIBOLAR/jira_mcp_sprinthealth`
-2. Configure with Jira URL + email
-3. Use OAuth for seamless authentication
+- **Runtime**: TypeScript
+- **Entry Point**: `src/server-http-oauth.ts` (OAuth-enabled)
+- **Exports**: `createServer`, `configSchema`, OAuth tools
+- **Pattern**: Lazy loading + OAuth browser authentication
+- **Fallback**: API token auth still available
 
 ---
 
-**🎉 OAuth authentication now works alongside the existing solution!**
+🎉 **OAuth authentication active - Ready for seamless deployment in Smithery!**

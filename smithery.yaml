@@ -1,6 +1,25 @@
-name: jira-mcp-sprinthealth
-version: 4.1.0
-description: "Jira MCP Server with OAuth Browser Authentication - TypeScript Runtime"
+name: jira-mcp-remote-oauth
+version: 5.0.0
+description: "Remote Jira MCP Server with HTTP Transport and OAuth Authentication"
 
 runtime: "typescript"
 entrypoint: "src/index.ts"
+transport: "http"
+port: 3000
+
+# OAuth Configuration for Smithery
+oauth:
+  issuer_url: "${OAUTH_ISSUER_URL}"
+  authorization_url: "${OAUTH_AUTHORIZATION_URL}"
+  token_url: "${OAUTH_TOKEN_URL}"
+  registration_url: "${OAUTH_REGISTRATION_URL}"
+
+# Environment Variables that Smithery will inject
+environment:
+  THIS_HOSTNAME: "${SMITHERY_HOSTNAME}"
+  OAUTH_ISSUER_URL: "${OAUTH_ISSUER_URL}"
+  OAUTH_AUTHORIZATION_URL: "${OAUTH_AUTHORIZATION_URL}"
+  OAUTH_TOKEN_URL: "${OAUTH_TOKEN_URL}"
+  OAUTH_REGISTRATION_URL: "${OAUTH_REGISTRATION_URL}"
+  OAUTH_CLIENT_ID: "${OAUTH_CLIENT_ID}"
+  OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET}"
