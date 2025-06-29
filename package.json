@@ -2,8 +2,8 @@
   "name": "jira-mcp-mvp",
   "version": "3.0.0",
   "description": "Comprehensive Jira MCP Server - 29 tools for complete Jira automation: CRUD operations, bulk processing, configuration management, and advanced analytics",
-  "main": "src/index.ts",
-  "module": "./src/index.ts",
+  "main": "src/index-http.ts",
+  "module": "./src/index-http.ts",
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",

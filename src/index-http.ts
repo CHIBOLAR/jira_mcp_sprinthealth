@@ -41,6 +41,7 @@ function parseSmitheryConfig(configParam?: string): Config | null {
 
 /**
  * Get configuration from environment or defaults (for lazy loading)
+ * Never throws errors - always returns valid defaults for tool listing
  */
 function getEnvConfig(): Config {
   return {
