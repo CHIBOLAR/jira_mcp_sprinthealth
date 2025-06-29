@@ -5,25 +5,29 @@ startCommand:
   configSchema:
     type: "object"
     properties:
-      jiraBaseUrl:
+      companyUrl:
         type: "string"
-        title: "Jira Base URL"
-        description: "Base URL for your Jira instance (e.g., https://company.atlassian.net)"
-        pattern: "^https://.+\\.atlassian\\.net$"
-      jiraEmail:
+        title: "Company Jira URL"
+        description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+      userEmail:
         type: "string"
-        title: "Jira Email"
-        description: "Email address for Jira authentication"
-        format: "email"
+        title: "Your Email"
+        description: "Your work email address"
+      authMethod:
+        type: "string"
+        title: "Authentication Method"
+        description: "OAuth (recommended) or API Token (fallback)"
+        enum: ["oauth", "token"]
+        default: "oauth"
       jiraApiToken:
         type: "string"
-        title: "Jira API Token"
-        description: "API token for Jira authentication. Get one from: https://id.atlassian.com/manage-profile/security/api-tokens"
-        minLength: 24
+        title: "API Token (Optional)"
+        description: "Only needed if OAuth fails. Get from: https://id.atlassian.com/manage-profile/security/api-tokens"
         format: "password"
-    required: ["jiraBaseUrl", "jiraEmail", "jiraApiToken"]
+    required: ["companyUrl", "userEmail"]
 
 exampleConfig:
-  jiraBaseUrl: "https://your-company.atlassian.net"
-  jiraEmail: "user@company.com"
-  jiraApiToken: "your-api-token-here"
+  companyUrl: "https://your-company.atlassian.net"
+  userEmail: "user@company.com"
+  authMethod: "oauth"
+  jiraApiToken: ""

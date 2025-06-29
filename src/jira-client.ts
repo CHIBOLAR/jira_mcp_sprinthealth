@@ -25,21 +25,27 @@ export class JiraApiClient {
     this.config = config;
     this.configManager = ConfigurationManager.getInstance();
     
-    // Validate configuration
-    if (!config.baseUrl || !config.email || !config.apiToken) {
-      throw ErrorHandler.handleConfigError(['JIRA_URL', 'JIRA_EMAIL', 'JIRA_API_TOKEN']);
+    // Validate configuration based on auth method
+    if (!config.baseUrl || !config.email) {
+      throw ErrorHandler.handleConfigError(['JIRA_URL', 'JIRA_EMAIL']);
     }
 
-    // Create axios instance with authentication
-    const auth = Buffer.from(`${config.email}:${config.apiToken}`).toString('base64');
-    
+    // Validate auth-specific requirements
+    if (config.authMethod === 'oauth') {
+      if (!config.accessToken) {
+        throw ErrorHandler.handleConfigError(['OAUTH_ACCESS_TOKEN']);
+      }
+    } else {
+      // Default to token auth or when explicitly specified
+      if (!config.apiToken) {
+        throw ErrorHandler.handleConfigError(['JIRA_API_TOKEN']);
+      }
+    }
+
+    // Create axios instance with dynamic authentication
     this.client = axios.create({
       baseURL: config.baseUrl,
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: this.getAuthHeaders(),
       timeout: config.timeout || 30000,
     });
 
@@ -54,6 +60,59 @@ export class JiraApiClient {
 
     // Auto-cleanup cache every 5 minutes
     setInterval(() => this.cleanupCache(), 5 * 60 * 1000);
+  }
+
+  /**
+   * Get authentication headers based on auth method
+   */
+  private getAuthHeaders(): Record<string, string> {
+    const baseHeaders = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+
+    if (this.config.authMethod === 'oauth' && this.config.accessToken) {
+      return {
+        ...baseHeaders,
+        'Authorization': `Bearer ${this.config.accessToken}`,
+      };
+    } else {
+      // Traditional API token auth
+      const auth = Buffer.from(`${this.config.email}:${this.config.apiToken}`).toString('base64');
+      return {
+        ...baseHeaders,
+        'Authorization': `Basic ${auth}`,
+      };
+    }
+  }
+
+  /**
+   * Update access token for OAuth authentication
+   */
+  updateAccessToken(accessToken: string): void {
+    this.config.accessToken = accessToken;
+    this.config.authMethod = 'oauth';
+    
+    // Update axios instance headers
+    Object.assign(this.client.defaults.headers, this.getAuthHeaders());
+  }
+
+  /**
+   * Check if client is authenticated
+   */
+  isAuthenticated(): boolean {
+    if (this.config.authMethod === 'oauth') {
+      return !!this.config.accessToken;
+    } else {
+      return !!this.config.apiToken;
+    }
+  }
+
+  /**
+   * Get current authentication method
+   */
+  getAuthMethod(): string {
+    return this.config.authMethod || 'token';
   }
 
   /**

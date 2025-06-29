@@ -2,7 +2,10 @@
 export interface JiraConfig {
   baseUrl: string;
   email: string;
-  apiToken: string;
+  apiToken?: string; // Optional for OAuth
+  accessToken?: string; // For OAuth authentication
+  refreshToken?: string; // For OAuth token refresh
+  authMethod?: 'oauth' | 'token'; // Authentication method
   timeout?: number;
   maxRetries?: number;
   cacheTTL?: number;
