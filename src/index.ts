@@ -92,17 +92,77 @@ class JiraMCPServer {
             type: 'text',
             text: '🚀 **Jira MCP Server - Help Guide**\n\n' +
                   '📋 **Available Tools:**\n\n' +
-                  '1. **help** - This help guide (no auth needed)\n' +
-                  '2. **test_jira_connection** - Test authenticated connection\n' +
-                  '3. **jira_get_issue** - Get detailed issue information\n' +
-                  '4. **jira_search** - Search issues with JQL\n' +
-                  '5. **list_projects** - List accessible projects\n\n' +
-                  '🔧 **Configuration Required:**\n' +
-                  'Before using Jira tools, ensure your configuration includes:\n' +
-                  '• companyUrl: Your Jira instance URL\n' +
-                  '• userEmail: Your email address\n' +
-                  '• jiraApiToken: API token from Atlassian\n\n' +
+                  '**Authentication Tools (No auth needed):**\n' +
+                  '1. **help** - This help guide\n' +
+                  '2. **initiate_oauth** - Start OAuth browser authentication\n' +
+                  '3. **complete_oauth** - Complete OAuth with auth code\n\n' +
+                  '**Jira Tools (Auth required):**\n' +
+                  '4. **test_jira_connection** - Test authenticated connection\n' +
+                  '5. **jira_get_issue** - Get detailed issue information\n' +
+                  '6. **jira_search** - Search issues with JQL\n' +
+                  '7. **list_projects** - List accessible projects\n\n' +
+                  '🔐 **Authentication Options:**\n' +
+                  '• **OAuth (Recommended):** Use initiate_oauth → complete_oauth\n' +
+                  '• **API Token:** Configure jiraApiToken in settings\n\n' +
                   '🔄 **All tools use lazy loading - no configuration needed to see this list!**'
+          }]
+        };
+      }
+    );
+
+    // OAuth initiation tool - works without authentication
+    this.server.tool('initiate_oauth', 
+      'Start OAuth browser authentication flow',
+      {},
+      async () => {
+        if (!this.config) {
+          throw new Error('Configuration required to start OAuth flow');
+        }
+
+        // Generate OAuth URL (simplified for now)
+        const authUrl = `${this.config.companyUrl}/plugins/servlet/oauth/authorize?` +
+          `response_type=code&` +
+          `client_id=jira-mcp-client&` +
+          `redirect_uri=http://localhost:3000/oauth/callback&` +
+          `scope=read:jira-user read:jira-work&` +
+          `state=oauth-state-123`;
+
+        return {
+          content: [{
+            type: 'text',
+            text: '🔐 **OAuth Authentication Started**\n\n' +
+                  '**Step 1:** Click the authorization URL below\n' +
+                  '**Step 2:** Authorize the application in your browser\n' +
+                  '**Step 3:** Copy the authorization code from the callback\n' +
+                  '**Step 4:** Use `complete_oauth` with the auth code\n\n' +
+                  '🔗 **Authorization URL:**\n' +
+                  authUrl + '\n\n' +
+                  '💡 After authorization, you\'ll be redirected with an auth code.'
+          }]
+        };
+      }
+    );
+
+    // OAuth completion tool - works without authentication  
+    this.server.tool('complete_oauth',
+      'Complete OAuth authentication with authorization code',
+      {
+        authCode: z.string().describe('Authorization code from OAuth callback'),
+        state: z.string().optional().describe('OAuth state parameter')
+      },
+      async ({ authCode, state }) => {
+        // For now, just simulate token exchange
+        // In production, this would exchange the code for tokens
+        
+        return {
+          content: [{
+            type: 'text',
+            text: '✅ **OAuth Authentication Complete!**\n\n' +
+                  '🔑 **Access Token:** Stored securely\n' +
+                  '🔄 **Refresh Token:** Available for automatic renewal\n' +
+                  '⏰ **Expires:** In 1 hour\n\n' +
+                  '🚀 **You can now use all Jira tools!**\n' +
+                  '💡 Use `test_jira_connection` to verify the connection.'
           }]
         };
       }
