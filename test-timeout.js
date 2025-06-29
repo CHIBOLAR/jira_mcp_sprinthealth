@@ -24,12 +24,18 @@ async function testTimeout() {
     console.log('   • Optimized MCP endpoint with timeout handling');
     console.log('   • Immediate tool list responses');
     console.log('   • CommonJS compatibility fixes');
+    console.log('   • Config schema in smithery.yaml (not endpoint)');
     
     console.log('\n🚀 Server ready for Smithery deployment!');
     console.log('📋 Test endpoints:');
     console.log('   • http://localhost:3000/health');
-    console.log('   • http://localhost:3000/config-schema');
-    console.log('   • http://localhost:3000/mcp');
+    console.log('   • http://localhost:3000/mcp (with config via query params)');
+    
+    console.log('\n💡 Smithery Integration:');
+    console.log('   • Configuration schema defined in smithery.yaml');
+    console.log('   • Config passed as base64 query parameter to /mcp endpoint');
+    console.log('   • Tools list available without configuration');
+    console.log('   • Lazy loading when tools are executed');
     
     // Keep server running for 30 seconds for testing
     setTimeout(() => {

@@ -341,36 +341,6 @@ class HttpJiraMCPServer {
       });
     });
 
-    // Configuration schema endpoint for Smithery
-    app.get('/config-schema', (req, res) => {
-      res.json({
-        type: "object",
-        properties: {
-          companyUrl: {
-            type: "string",
-            title: "Company Jira URL",
-            description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
-          },
-          userEmail: {
-            type: "string",
-            title: "Your Email",
-            description: "Your work email address"
-          },
-          authMethod: {
-            type: "string",
-            enum: ["oauth", "token"],
-            default: "token",
-            description: "Authentication method"
-          },
-          jiraApiToken: {
-            type: "string",
-            description: "Jira API Token from https://id.atlassian.com/manage-profile/security/api-tokens"
-          }
-        },
-        required: ["companyUrl", "userEmail"]
-      });
-    });
-
     // MCP endpoint with lazy loading and timeout optimization
     app.all('/mcp', async (req, res) => {
       // Set timeout headers for faster responses
@@ -451,6 +421,7 @@ class HttpJiraMCPServer {
               <li>✅ Tools list available without config</li>
               <li>✅ Session-based configuration</li>
               <li>✅ Smithery compatible</li>
+              <li>✅ Config schema in smithery.yaml</li>
             </ul>
 
             <h2>🛠️ Available Tools:</h2>
@@ -465,9 +436,11 @@ class HttpJiraMCPServer {
             <h2>🔗 Endpoints:</h2>
             <ul>
               <li><strong>GET /health</strong> - Health check</li>
-              <li><strong>GET /config-schema</strong> - Configuration schema</li>
-              <li><strong>ALL /mcp</strong> - MCP protocol endpoint</li>
+              <li><strong>ALL /mcp</strong> - MCP protocol endpoint (with config via query params)</li>
             </ul>
+
+            <h2>⚙️ Configuration:</h2>
+            <p>Configuration schema is defined in <code>smithery.yaml</code> and passed via query parameters to the MCP endpoint.</p>
 
             <p><strong>Server URL:</strong> http://${HOST}:${PORT}</p>
           </body>
