@@ -6,7 +6,7 @@
  */
 
 import { createLazyServer } from './server-lazy.js';
-import HttpJiraMCPServer from './server-http-lazy.js';
+import HttpJiraMCPServerWithOAuth from './server-http-oauth.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 const isStdio = process.stdin.isTTY === false && process.stdout.isTTY === false;
@@ -36,7 +36,7 @@ async function main() {
     } else {
       // HTTP mode for Smithery and web deployments
       console.log('🚀 Starting Jira MCP Server in HTTP mode...');
-      const httpServer = new HttpJiraMCPServer();
+      const httpServer = new HttpJiraMCPServerWithOAuth();
       await httpServer.startServer();
     }
   } catch (error) {
