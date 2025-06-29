@@ -1,6 +1,6 @@
-name: jira-mcp-oauth
+name: jira-mcp-sprinthealth
 version: 4.0.0
-description: "Jira MCP Server with OAuth Browser Authentication - Individual User Access"
+description: "Jira MCP Server with Lazy Loading - Smithery Compatible"
 
 build:
   dockerfile: |
@@ -9,7 +9,6 @@ build:
     COPY package*.json ./
     RUN npm ci --only=production
     COPY dist/ ./dist/
-    COPY .env.template .env
     EXPOSE 3000
     CMD ["npm", "start"]
 

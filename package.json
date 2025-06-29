@@ -2,13 +2,14 @@
   "name": "jira-mcp-oauth",
   "version": "4.0.0",
   "description": "Jira MCP Server with OAuth Browser Authentication - Individual User Access",
-  "main": "dist/src/server-oauth.js",
-  "module": "./src/server-oauth.ts",
+  "main": "dist/src/server-http-lazy.js",
+  "module": "./src/server-http-lazy.ts",
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/src/server-oauth.js",
-    "dev": "tsx src/server-oauth.ts",
+    "start": "node dist/src/server-http-lazy.js",
+    "dev": "tsx src/server-http-lazy.ts",
+    "start:lazy": "tsx src/server-lazy.ts",
     "start:demo": "node dist/src/server.js"
   },
   "keywords": [
