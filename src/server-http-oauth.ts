@@ -45,6 +45,13 @@ class HttpJiraMCPServerWithOAuth {
   }
 
   /**
+   * Get the MCP server instance for Smithery compatibility
+   */
+  getMcpServer(): McpServer {
+    return this.server;
+  }
+
+  /**
    * Parse Smithery configuration
    */
   private parseConfig(configParam?: string): Config | null {
@@ -646,3 +653,9 @@ try {
 }
 
 export default HttpJiraMCPServerWithOAuth;
+
+// Export for Smithery TypeScript runtime compatibility
+export function createServer(config?: Config): McpServer {
+  const server = new HttpJiraMCPServerWithOAuth();
+  return server.getMcpServer();
+}

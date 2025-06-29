@@ -3,4 +3,4 @@ version: 4.1.0
 description: "Jira MCP Server with OAuth Browser Authentication - TypeScript Runtime"
 
 runtime: "typescript"
-entrypoint: "src/index.ts"
+entrypoint: "src/server-http-oauth.ts"
