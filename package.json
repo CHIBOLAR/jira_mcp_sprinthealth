@@ -2,12 +2,13 @@
   "name": "jira-mcp-remote-oauth",
   "version": "5.0.0",
   "description": "Remote Jira MCP Server with HTTP Transport and OAuth Authentication",
-  "main": "dist/index.js",
+  "main": "dist/index-http.js",
+  "module": "./src/index-http.ts",
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
+    "start": "node dist/index-http.js",
+    "dev": "tsx src/index-http.ts",
     "test": "node --test"
   },
   "keywords": [
