@@ -1,8 +1,9 @@
 name: jira-mcp-sprinthealth
-version: 4.0.0
-description: "Jira MCP Server with OAuth Browser Authentication - Smithery Compatible"
+version: 4.1.0
+description: "Jira MCP Server with OAuth Browser Authentication - TypeScript Runtime"
 
 runtime: "typescript"
+entrypoint: "src/server-http-oauth.ts"
 
 configSchema:
   type: "object"

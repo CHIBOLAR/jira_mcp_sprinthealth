@@ -1,6 +1,6 @@
 {
   "name": "jira-mcp-oauth",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Jira MCP Server with OAuth Browser Authentication - Individual User Access",
   "main": "dist/src/server-http-oauth.js",
   "module": "./src/server-http-oauth.ts",

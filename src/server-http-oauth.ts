@@ -38,7 +38,7 @@ class HttpJiraMCPServerWithOAuth {
   constructor() {
     this.server = new McpServer({
       name: 'jira-mcp-sprinthealth',
-      version: '4.0.0',
+      version: '4.1.0',
     });
 
     this.setupTools();
