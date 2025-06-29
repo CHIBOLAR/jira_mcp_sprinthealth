@@ -1,7 +1,13 @@
 export interface JiraConfig {
     baseUrl: string;
     email: string;
-    apiToken: string;
+    apiToken?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    authMethod?: 'oauth' | 'token';
+    timeout?: number;
+    maxRetries?: number;
+    cacheTTL?: number;
 }
 export interface JiraProject {
     id: string;
@@ -49,6 +55,11 @@ export interface JiraIssue {
         priority: {
             name: string;
             id: string;
+        };
+        issuetype: {
+            name: string;
+            id: string;
+            subtask: boolean;
         };
         assignee?: {
             displayName: string;
@@ -231,4 +242,3 @@ export declare class JiraApiError extends Error {
 export declare class ConfigurationError extends Error {
     constructor(message: string);
 }
-//# sourceMappingURL=index.d.ts.map

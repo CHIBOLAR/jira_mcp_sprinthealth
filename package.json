@@ -1,56 +1,34 @@
 {
-  "name": "jira-mcp-oauth",
-  "version": "4.1.0",
-  "description": "Jira MCP Server with OAuth Browser Authentication - Individual User Access",
-  "main": "dist/src/index.js",
-  "module": "./src/index.ts",
+  "name": "jira-mcp-server",
+  "version": "1.0.0",
+  "description": "Simple Jira MCP Server with API Token Authentication",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/src/server-http-oauth.js",
-    "dev": "tsx src/server-http-oauth.ts",
-    "start:lazy": "tsx src/server-lazy.ts",
-    "start:demo": "node dist/src/server.js"
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
   },
   "keywords": [
     "mcp",
     "jira",
-    "oauth",
-    "browser-auth",
-    "individual-user",
     "atlassian",
-    "oauth2.1",
-    "pkce",
-    "real-api",
-    "production-ready"
+    "api"
   ],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.10.0",
-    "cors": "^2.8.5",
     "dotenv": "^17.0.0",
-    "express": "^4.18.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@types/axios": "^0.9.36",
-    "@types/cors": "^2.8.16",
-    "@types/express": "^4.17.21",
     "@types/node": "^20.14.2",
     "tsx": "^4.7.0",
     "typescript": "^5.4.5"
   },
   "engines": {
-    "node": ">=20.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-org/jira-mcp-oauth.git"
-  },
-  "bugs": {
-    "url": "https://github.com/your-org/jira-mcp-oauth/issues"
-  },
-  "homepage": "https://github.com/your-org/jira-mcp-oauth#readme"
+    "node": ">=18.0.0"
+  }
 }
