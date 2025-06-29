@@ -314,6 +314,67 @@ class JiraMCPServer {
         configSchema: '/config-schema'
       });
     });
+
+    // Config schema endpoint for Smithery
+    app.get('/config', (req, res) => {
+      res.json({
+        type: "object",
+        properties: {
+          companyUrl: {
+            type: "string",
+            title: "Company Jira URL",
+            description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+          },
+          userEmail: {
+            type: "string",
+            title: "Your Email",
+            description: "Your work email address"
+          },
+          authMethod: {
+            type: "string",
+            enum: ["oauth", "token"],
+            default: "oauth",
+            description: "OAuth (recommended) or API Token (fallback)"
+          },
+          jiraApiToken: {
+            type: "string",
+            description: "Only needed if OAuth fails. Get from: https://id.atlassian.com/manage-profile/security/api-tokens"
+          }
+        },
+        required: ["companyUrl", "userEmail"]
+      });
+    });
+
+    // Schema endpoint (alternative for Smithery)
+    app.get('/schema', (req, res) => {
+      res.json({
+        type: "object",
+        properties: {
+          companyUrl: {
+            type: "string",
+            title: "Company Jira URL",
+            description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+          },
+          userEmail: {
+            type: "string",
+            title: "Your Email",
+            description: "Your work email address"
+          },
+          authMethod: {
+            type: "string",
+            enum: ["oauth", "token"],
+            default: "oauth",
+            description: "OAuth (recommended) or API Token (fallback)"
+          },
+          jiraApiToken: {
+            type: "string",
+            description: "Only needed if OAuth fails. Get from: https://id.atlassian.com/manage-profile/security/api-tokens"
+          }
+        },
+        required: ["companyUrl", "userEmail"]
+      });
+    });
+
     // MCP endpoint for Smithery
     app.all('/mcp', async (req, res) => {
       try {
