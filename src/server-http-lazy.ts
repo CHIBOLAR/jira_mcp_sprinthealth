@@ -289,11 +289,12 @@ class HttpJiraMCPServer {
       }
     );
 
-    // Help tool - no configuration needed
+    // Help tool - no configuration needed, immediate response
     this.server.tool('help', 
       'Get help and information about available tools',
       {},
       async () => {
+        // Return immediately without any async operations
         return {
           content: [{
             type: 'text',
@@ -304,12 +305,10 @@ class HttpJiraMCPServer {
                   '3. **jira_search** - Search issues with JQL\n' +
                   '4. **list_projects** - List accessible projects\n' +
                   '5. **help** - This help guide\n\n' +
-                  '🔧 **Configuration Required:**\n' +
-                  'Tools require configuration with:\n' +
-                  '• companyUrl: Your Jira instance URL\n' +
-                  '• userEmail: Your email address\n' +
-                  '• jiraApiToken: API token from Atlassian\n\n' +
-                  '✅ **Lazy Loading Active:** Tools load configuration only when needed!'
+                  '🔧 **Ready for Use:**\n' +
+                  'Tools require Jira configuration when executed.\n' +
+                  'Configuration is loaded lazily - no setup needed to browse tools!\n\n' +
+                  '⚡ **Fast Response:** This server uses lazy loading for optimal performance.'
           }]
         };
       }
@@ -329,13 +328,16 @@ class HttpJiraMCPServer {
 
     const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
-    // Health check
+    // Health check - immediate response
     app.get('/health', (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
       res.json({
         status: 'healthy',
         service: 'jira-mcp-sprinthealth',
         version: '4.0.0',
-        features: ['lazy-loading', 'smithery-compatible', 'session-based']
+        features: ['lazy-loading', 'smithery-compatible', 'session-based'],
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
       });
     });
 
@@ -369,8 +371,11 @@ class HttpJiraMCPServer {
       });
     });
 
-    // MCP endpoint with lazy loading
+    // MCP endpoint with lazy loading and timeout optimization
     app.all('/mcp', async (req, res) => {
+      // Set timeout headers for faster responses
+      res.setTimeout(10000); // 10 second timeout
+      
       try {
         const configParam = req.query.config as string | undefined;
         const config = this.parseConfig(configParam);
@@ -388,6 +393,7 @@ class HttpJiraMCPServer {
         if (transports[sessionId]) {
           transport = transports[sessionId];
         } else {
+          // Create transport with optimized settings
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => sessionId,
           });
@@ -401,17 +407,28 @@ class HttpJiraMCPServer {
             }
           };
 
+          // Connect server to transport
           await this.server.connect(transport);
         }
 
-        await transport.handleRequest(req, res, req.body);
+        // Handle request with timeout protection
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Request timeout')), 9000);
+        });
+
+        const requestPromise = transport.handleRequest(req, res, req.body);
+        
+        await Promise.race([requestPromise, timeoutPromise]);
         
       } catch (error) {
         console.error('❌ MCP Error:', error);
         if (!res.headersSent) {
           res.status(500).json({
             jsonrpc: '2.0',
-            error: { code: -32603, message: 'Internal server error' },
+            error: { 
+              code: -32603, 
+              message: error instanceof Error ? error.message : 'Internal server error' 
+            },
             id: null,
           });
         }
@@ -476,13 +493,25 @@ class HttpJiraMCPServer {
   }
 }
 
-// Start server if run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const server = new HttpJiraMCPServer();
-  server.startServer().catch((error) => {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  });
+// Start server if run directly (CommonJS compatible)
+try {
+  const isMainModule = typeof require !== 'undefined' && require.main === module;
+  if (isMainModule) {
+    const server = new HttpJiraMCPServer();
+    server.startServer().catch((error) => {
+      console.error('❌ Failed to start server:', error);
+      process.exit(1);
+    });
+  }
+} catch (error) {
+  // Fallback for module detection issues
+  if (process.argv[1] && process.argv[1].includes('server-http-lazy')) {
+    const server = new HttpJiraMCPServer();
+    server.startServer().catch((error) => {
+      console.error('❌ Failed to start server:', error);
+      process.exit(1);
+    });
+  }
 }
 
 export default HttpJiraMCPServer;

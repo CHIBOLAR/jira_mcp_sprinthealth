@@ -56,4 +56,15 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-main();
+// Check if this is the main module (CommonJS compatible)
+try {
+  const isMainModule = typeof require !== 'undefined' && require.main === module;
+  if (isMainModule) {
+    main();
+  }
+} catch (error) {
+  // Fallback for module detection
+  if (process.argv[1] && (process.argv[1].includes('index.js') || process.argv[1].includes('index.ts'))) {
+    main();
+  }
+}

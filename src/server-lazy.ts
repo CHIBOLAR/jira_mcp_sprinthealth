@@ -295,13 +295,27 @@ export function createLazyServer(): McpServer {
   return lazyServer.getServer();
 }
 
-// Direct execution mode
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const lazyServer = new LazyJiraMCPServer();
-  const transport = new StdioServerTransport();
-  
-  lazyServer.getServer().connect(transport).catch((error) => {
-    console.error('Failed to start MCP server:', error);
-    process.exit(1);
-  });
+// Direct execution mode (CommonJS compatible)
+try {
+  const isMainModule = typeof require !== 'undefined' && require.main === module;
+  if (isMainModule) {
+    const lazyServer = new LazyJiraMCPServer();
+    const transport = new StdioServerTransport();
+    
+    lazyServer.getServer().connect(transport).catch((error) => {
+      console.error('Failed to start MCP server:', error);
+      process.exit(1);
+    });
+  }
+} catch (error) {
+  // Fallback detection
+  if (process.argv[1] && process.argv[1].includes('server-lazy')) {
+    const lazyServer = new LazyJiraMCPServer();
+    const transport = new StdioServerTransport();
+    
+    lazyServer.getServer().connect(transport).catch((error) => {
+      console.error('Failed to start MCP server:', error);
+      process.exit(1);
+    });
+  }
 }
