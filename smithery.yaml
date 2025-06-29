@@ -2,10 +2,7 @@ name: jira-mcp-sprinthealth
 version: 4.0.0
 description: "Jira MCP Server with OAuth Browser Authentication - Smithery Compatible"
 
-runtime: "container"
-
-startCommand:
-  type: "http"
+runtime: "typescript"
 
 configSchema:
   type: "object"
@@ -34,13 +31,3 @@ exampleConfig:
   companyUrl: "https://your-company.atlassian.net"
   userEmail: "your.email@company.com"
   authMethod: "oauth"
-
-build:
-  dockerfile: |
-    FROM node:20-alpine
-    WORKDIR /app
-    COPY package*.json ./
-    RUN npm ci --only=production
-    COPY dist/ ./dist/
-    EXPOSE 3000
-    CMD ["npm", "start"]
