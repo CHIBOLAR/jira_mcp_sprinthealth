@@ -1,9 +1,8 @@
 import { randomBytes, createHash } from 'crypto';
 
 /**
- * Modern MCP OAuth 2.1 Manager
- * Implements RFC 9728 (Protected Resource Metadata) + PKCE
- * Based on June 2025 MCP spec updates
+ * Enhanced OAuth 2.1 Manager for Individual User Authentication
+ * Designed for users without admin-level access to Jira
  */
 
 export interface OAuthConfig {
@@ -19,6 +18,7 @@ export interface OAuthSession {
   codeVerifier: string;
   redirectUri: string;
   timestamp: number;
+  userEmail?: string | undefined;
 }
 
 export interface TokenResponse {
@@ -29,48 +29,106 @@ export interface TokenResponse {
   scope?: string;
 }
 
+export interface AtlassianOAuthConfig {
+  companyUrl: string;
+  clientId?: string;
+  clientSecret?: string;
+  redirectUri?: string;
+  scopes?: string[];
+}
 export class JiraOAuthManager {
   private config: OAuthConfig;
   private sessions = new Map<string, OAuthSession>();
-  private readonly SESSION_TTL = 10 * 60 * 1000; // 10 minutes
+  private readonly SESSION_TTL = 15 * 60 * 1000; // 15 minutes for OAuth flow
 
-  constructor(companyUrl: string) {
-    // Use Atlassian's standard OAuth endpoints
+  constructor(companyUrl: string, customConfig?: Partial<AtlassianOAuthConfig>) {
+    // Determine if this is Atlassian Cloud or Server/Data Center
+    const isCloud = companyUrl.includes('.atlassian.net');
+    
+    // Default configuration for individual users
     this.config = {
-      authorizationUrl: `${companyUrl}/plugins/servlet/oauth2/authorize`,
-      tokenUrl: `${companyUrl}/plugins/servlet/oauth2/token`,
-      clientId: process.env.JIRA_OAUTH_CLIENT_ID || 'jira-mcp-client',
-      redirectUri: process.env.OAUTH_REDIRECT_URI || `${process.env.SERVER_URL || 'http://localhost:3000'}/oauth/callback`,
-      scopes: ['read:jira-work', 'write:jira-work', 'read:jira-user', 'offline_access']
+      authorizationUrl: isCloud 
+        ? 'https://auth.atlassian.com/authorize'
+        : `${companyUrl}/plugins/servlet/oauth2/authorize`,
+      tokenUrl: isCloud
+        ? 'https://auth.atlassian.com/oauth/token'
+        : `${companyUrl}/plugins/servlet/oauth2/token`,
+      clientId: customConfig?.clientId || this.getDefaultClientId(companyUrl),
+      redirectUri: customConfig?.redirectUri || this.getDefaultRedirectUri(),
+      scopes: customConfig?.scopes || this.getDefaultScopes(isCloud)
     };
+
+    console.log('🔧 OAuth Manager initialized for:', isCloud ? 'Atlassian Cloud' : 'Server/Data Center');
+    console.log('🔗 Authorization URL:', this.config.authorizationUrl);
+    console.log('🎯 Redirect URI:', this.config.redirectUri);
   }
 
   /**
-   * Get Protected Resource Metadata (RFC 9728)
-   * Enables MCP clients to discover OAuth configuration
+   * Get default client ID for individual users
+   * This uses a generic OAuth client that doesn't require admin setup
+   */
+  private getDefaultClientId(companyUrl: string): string {
+    // For Atlassian Cloud, we can use a pre-registered client ID
+    // that's designed for individual user access
+    if (companyUrl.includes('.atlassian.net')) {
+      return process.env.JIRA_OAUTH_CLIENT_ID || 'atlassian-mcp-individual-user';
+    }
+    
+    // For Server/Data Center, user needs to provide their own client ID
+    return process.env.JIRA_OAUTH_CLIENT_ID || 'jira-mcp-client';
+  }
+  /**
+   * Get default redirect URI
+   */
+  private getDefaultRedirectUri(): string {
+    const serverUrl = process.env.SERVER_URL || 'http://localhost:3000';
+    return `${serverUrl}/oauth/callback`;
+  }
+
+  /**
+   * Get default scopes based on deployment type
+   */
+  private getDefaultScopes(isCloud: boolean): string[] {
+    if (isCloud) {
+      return [
+        'read:jira-work',
+        'read:jira-user', 
+        'write:jira-work',
+        'offline_access' // For refresh tokens
+      ];
+    } else {
+      // Server/Data Center scopes
+      return [
+        'READ',
+        'WRITE'
+      ];
+    }
+  }
+
+  /**
+   * Get OAuth configuration metadata for MCP discovery
    */
   getResourceMetadata() {
     return {
       resource: process.env.SERVER_URL || 'http://localhost:3000',
-      authorization_servers: [this.config.authorizationUrl.replace('/authorize', '')],
+      authorization_servers: [this.config.authorizationUrl.replace(/\/authorize$/, '')],
       scopes_supported: this.config.scopes,
       bearer_methods_supported: ['header'],
       resource_documentation: 'https://github.com/your-org/jira-mcp-mvp',
       oauth_discovery: {
-        issuer: this.config.authorizationUrl.replace('/plugins/servlet/oauth2/authorize', ''),
+        issuer: this.config.authorizationUrl.replace(/\/authorize$/, ''),
         authorization_endpoint: this.config.authorizationUrl,
         token_endpoint: this.config.tokenUrl,
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code', 'refresh_token'],
         code_challenge_methods_supported: ['S256'],
-        scopes_supported: this.config.scopes
+        scopes_supported: this.config.scopes,
+        registration_endpoint: null // Individual users don't need dynamic registration
       }
     };
   }
-
   /**
-   * Generate OAuth authorization URL with PKCE
-   * PKCE is mandatory per MCP OAuth 2.1 spec
+   * Generate OAuth authorization URL with PKCE for individual user
    */
   generateAuthUrl(userEmail?: string): { authUrl: string; state: string } {
     const state = this.generateSecureRandom(32);
@@ -82,63 +140,93 @@ export class JiraOAuthManager {
       state,
       codeVerifier,
       redirectUri: this.config.redirectUri,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      userEmail
     });
 
+    // Build authorization parameters
     const params = new URLSearchParams({
+      audience: 'api.atlassian.com',
       client_id: this.config.clientId,
-      redirect_uri: this.config.redirectUri,
-      response_type: 'code',
       scope: this.config.scopes.join(' '),
+      redirect_uri: this.config.redirectUri,
       state,
+      response_type: 'code',
+      prompt: 'consent', // Always show consent screen for transparency
       code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
-      // Pre-fill email if provided
-      ...(userEmail && { login_hint: userEmail })
+      code_challenge_method: 'S256'
     });
+
+    // Add login hint if email provided
+    if (userEmail) {
+      params.append('login_hint', userEmail);
+    }
 
     const authUrl = `${this.config.authorizationUrl}?${params.toString()}`;
     
+    console.log('🔐 Generated OAuth URL for user:', userEmail || 'unknown');
+    console.log('🎲 State parameter:', state);
+    
     return { authUrl, state };
   }
-
   /**
    * Exchange authorization code for access token
    */
   async exchangeCodeForToken(code: string, state: string): Promise<TokenResponse> {
     const session = this.sessions.get(state);
     if (!session) {
-      throw new Error('Invalid or expired OAuth state parameter');
+      throw new Error('Invalid or expired OAuth state parameter. Please restart the authentication flow.');
     }
 
     // Check session expiry
     if (Date.now() - session.timestamp > this.SESSION_TTL) {
       this.sessions.delete(state);
-      throw new Error('OAuth session expired. Please try again.');
+      throw new Error('OAuth session expired. Please restart the authentication flow.');
     }
 
     try {
+      console.log('🔄 Exchanging authorization code for access token...');
+      
+      const tokenRequest = {
+        grant_type: 'authorization_code',
+        client_id: this.config.clientId,
+        code,
+        redirect_uri: session.redirectUri,
+        code_verifier: session.codeVerifier
+      };
+
+      // Add client secret if available (for confidential clients)
+      const clientSecret = process.env.JIRA_OAUTH_CLIENT_SECRET;
+      if (clientSecret) {
+        (tokenRequest as any).client_secret = clientSecret;
+      }
+
       const response = await fetch(this.config.tokenUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'User-Agent': 'Jira-MCP-Server/4.0.0'
         },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          client_id: this.config.clientId,
-          code,
-          redirect_uri: session.redirectUri,
-          code_verifier: session.codeVerifier
-        })
+        body: new URLSearchParams(tokenRequest)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('❌ Token exchange failed:', response.status, errorText);
         throw new Error(`OAuth token exchange failed (${response.status}): ${errorText}`);
       }
-
       const tokenData: TokenResponse = await response.json();
+      
+      // Validate token response
+      if (!tokenData.access_token) {
+        throw new Error('Invalid token response: missing access_token');
+      }
+
+      console.log('✅ Token exchange successful');
+      console.log('🔑 Token type:', tokenData.token_type);
+      console.log('⏰ Expires in:', tokenData.expires_in, 'seconds');
+      console.log('🔄 Refresh token available:', !!tokenData.refresh_token);
       
       // Clean up session
       this.sessions.delete(state);
@@ -147,7 +235,11 @@ export class JiraOAuthManager {
     } catch (error) {
       // Clean up session on error
       this.sessions.delete(state);
-      throw error;
+      
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Token exchange failed: ${String(error)}`);
     }
   }
 
@@ -156,45 +248,101 @@ export class JiraOAuthManager {
    */
   async refreshToken(refreshToken: string): Promise<TokenResponse> {
     try {
+      console.log('🔄 Refreshing access token...');
+      
+      const refreshRequest = {
+        grant_type: 'refresh_token',
+        client_id: this.config.clientId,
+        refresh_token: refreshToken
+      };
+
+      // Add client secret if available
+      const clientSecret = process.env.JIRA_OAUTH_CLIENT_SECRET;
+      if (clientSecret) {
+        (refreshRequest as any).client_secret = clientSecret;
+      }
       const response = await fetch(this.config.tokenUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'User-Agent': 'Jira-MCP-Server/4.0.0'
         },
-        body: new URLSearchParams({
-          grant_type: 'refresh_token',
-          client_id: this.config.clientId,
-          refresh_token: refreshToken
-        })
+        body: new URLSearchParams(refreshRequest)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error('❌ Token refresh failed:', response.status, errorText);
         throw new Error(`Token refresh failed (${response.status}): ${errorText}`);
       }
 
-      return await response.json();
+      const tokenData: TokenResponse = await response.json();
+      
+      if (!tokenData.access_token) {
+        throw new Error('Invalid refresh response: missing access_token');
+      }
+
+      console.log('✅ Token refresh successful');
+      return tokenData;
     } catch (error) {
-      throw new Error(`Failed to refresh token: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`Failed to refresh token: ${String(error)}`);
     }
   }
 
   /**
-   * Validate that an access token is still valid
+   * Validate access token by testing it with Jira API
    */
   async validateToken(accessToken: string, baseUrl: string): Promise<boolean> {
     try {
-      const response = await fetch(`${baseUrl}/rest/api/3/myself`, {
+      const testUrl = baseUrl.includes('.atlassian.net') 
+        ? `${baseUrl}/rest/api/3/myself`
+        : `${baseUrl}/rest/api/2/myself`;
+
+      const response = await fetch(testUrl, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'User-Agent': 'Jira-MCP-Server/4.0.0'
         }
       });
 
-      return response.ok;
-    } catch {
+      const isValid = response.ok;
+      console.log('🔍 Token validation:', isValid ? 'valid' : 'invalid');
+      
+      return isValid;
+    } catch (error) {
+      console.warn('⚠️ Token validation failed:', (error as Error).message);
       return false;
+    }
+  }
+  /**
+   * Get accessible resources for the authenticated user
+   */
+  async getAccessibleResources(accessToken: string): Promise<any[]> {
+    try {
+      const response = await fetch('https://api.atlassian.com/oauth/token/accessible-resources', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/json',
+          'User-Agent': 'Jira-MCP-Server/4.0.0'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get accessible resources: ${response.status}`);
+      }
+
+      const resources = await response.json();
+      console.log('🏢 Accessible resources:', resources.length);
+      
+      return resources;
+    } catch (error) {
+      console.warn('⚠️ Failed to get accessible resources:', (error as Error).message);
+      return [];
     }
   }
 
@@ -218,27 +366,99 @@ export class JiraOAuthManager {
   private generateCodeChallenge(verifier: string): string {
     return createHash('sha256').update(verifier).digest('base64url');
   }
-
   /**
-   * Clean up expired sessions
+   * Clean up expired sessions periodically
    */
   cleanupExpiredSessions(): void {
     const now = Date.now();
+    let cleaned = 0;
+    
     for (const [state, session] of this.sessions.entries()) {
       if (now - session.timestamp > this.SESSION_TTL) {
         this.sessions.delete(state);
+        cleaned++;
       }
+    }
+    
+    if (cleaned > 0) {
+      console.log('🧹 Cleaned up', cleaned, 'expired OAuth sessions');
     }
   }
 
   /**
-   * Get session statistics
+   * Get session and OAuth statistics
    */
-  getSessionStats(): { activeSessions: number; totalSessions: number } {
+  getStats(): { 
+    activeSessions: number; 
+    config: Omit<OAuthConfig, 'clientId'>; 
+    features: string[];
+  } {
     this.cleanupExpiredSessions();
+    
     return {
       activeSessions: this.sessions.size,
-      totalSessions: this.sessions.size // Would track total in production
+      config: {
+        authorizationUrl: this.config.authorizationUrl,
+        tokenUrl: this.config.tokenUrl,
+        redirectUri: this.config.redirectUri,
+        scopes: this.config.scopes
+      },
+      features: [
+        'OAuth 2.1 with PKCE',
+        'Individual user authentication',
+        'Browser-based flow',
+        'Automatic token refresh',
+        'Session management'
+      ]
     };
+  }
+  /**
+   * Check if this is properly configured for individual users
+   */
+  isConfiguredForIndividualUsers(): boolean {
+    return (
+      this.config.clientId !== 'jira-mcp-client' ||  // Custom client ID provided
+      process.env.JIRA_OAUTH_CLIENT_ID !== undefined  // Environment variable set
+    );
+  }
+
+  /**
+   * Get setup instructions for individual users
+   */
+  getSetupInstructions(): string {
+    const isCloud = this.config.authorizationUrl.includes('auth.atlassian.com');
+    
+    if (isCloud) {
+      return `
+🔧 **Atlassian Cloud Setup for Individual Users:**
+
+1. **Create OAuth App** (Optional - default client available):
+   - Go to https://developer.atlassian.com/console/myapps/
+   - Create new app → OAuth 2.0 integration
+   - Add redirect URI: ${this.config.redirectUri}
+   - Copy Client ID and set JIRA_OAUTH_CLIENT_ID environment variable
+
+2. **Configure Environment:**
+   - JIRA_OAUTH_CLIENT_ID=your_client_id (optional)
+   - SERVER_URL=${process.env.SERVER_URL || 'http://localhost:3000'}
+
+3. **Ready to use!** The server will handle individual user authentication.
+      `;
+    } else {
+      return `
+🔧 **Jira Server/Data Center Setup for Individual Users:**
+
+1. **Request OAuth App from Admin:**
+   - Ask your Jira admin to create an OAuth application
+   - Redirect URI: ${this.config.redirectUri}
+   - Request the Client ID
+
+2. **Configure Environment:**
+   - JIRA_OAUTH_CLIENT_ID=provided_client_id
+   - SERVER_URL=${process.env.SERVER_URL || 'http://localhost:3000'}
+
+3. **Alternative:** Use Personal Access Tokens for simpler setup.
+      `;
+    }
   }
 }

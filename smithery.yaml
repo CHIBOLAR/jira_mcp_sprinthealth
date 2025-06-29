@@ -1,27 +1,39 @@
-runtime: "typescript"
+name: jira-mcp-oauth
+version: 4.0.0
+description: "Jira MCP Server with OAuth Browser Authentication - Individual User Access"
 
-configSchema:
-  type: "object"
-  properties:
-    companyUrl:
-      type: "string"
-      title: "Company Jira URL"
-      description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
-    userEmail:
-      type: "string"
-      title: "Your Email"
-      description: "Your work email address"
-    authMethod:
-      type: "string"
-      enum: ["oauth", "token"]
-      default: "oauth"
-      description: "OAuth (recommended) or API Token (fallback)"
-    jiraApiToken:
-      type: "string"
-      description: "Only needed if OAuth fails. Get from: https://id.atlassian.com/manage-profile/security/api-tokens"
-  required: ["companyUrl", "userEmail"]
+build:
+  dockerfile: |
+    FROM node:20-alpine
+    WORKDIR /app
+    COPY package*.json ./
+    RUN npm ci --only=production
+    COPY dist/ ./dist/
+    COPY .env.template .env
+    EXPOSE 3000
+    CMD ["npm", "start"]
 
-exampleConfig:
-  companyUrl: "https://your-company.atlassian.net"
-  userEmail: "user@company.com"
-  authMethod: "oauth"
+config:
+  schema:
+    type: object
+    properties:
+      companyUrl:
+        type: string
+        title: "Company Jira URL"
+        description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+      userEmail:
+        type: string
+        title: "Your Email"  
+        description: "Your work email address"
+      authMethod:
+        type: string
+        enum: ["oauth", "token"]
+        default: "oauth"
+        description: "OAuth (recommended) or API Token (fallback)"
+      jiraApiToken:
+        type: string
+        description: "Only needed if OAuth fails"
+      oauthClientId:
+        type: string
+        description: "OAuth Client ID from Atlassian Developer Console (optional - uses default if not provided)"
+    required: ["companyUrl", "userEmail"]

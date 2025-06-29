@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios from 'axios';
 import { JiraConfig, JiraProject, JiraBoard, JiraSprint, JiraIssue, JiraApiError } from '../types/index.js';
 import { ErrorHandler, JiraError, PerformanceMonitor } from './error-handler.js';
 import { ConfigurationManager } from './config-manager.js';
@@ -15,7 +15,7 @@ interface CacheEntry<T> {
 }
 
 export class JiraApiClient {
-  private client: AxiosInstance;
+  private client: any;
   private config: JiraConfig;
   private cache = new Map<string, CacheEntry<any>>();
   private requestQueue = new Map<string, Promise<any>>();
@@ -51,8 +51,8 @@ export class JiraApiClient {
 
     // Enhanced response interceptor with categorized error handling
     this.client.interceptors.response.use(
-      (response) => response,
-      (error) => {
+      (response: any) => response,
+      (error: any) => {
         const categorizedError = ErrorHandler.categorizeAndHandle(error);
         throw categorizedError;
       }
@@ -211,7 +211,7 @@ export class JiraApiClient {
       const result = await this.cachedRequest(
         'projects',
         async () => {
-          const response: AxiosResponse<{ values: JiraProject[] }> = await this.client.get('/rest/api/3/project/search?maxResults=1000');
+          const response: any = await this.client.get('/rest/api/3/project/search?maxResults=1000');
           return response.data.values;
         },
         600000 // 10 minutes cache for projects
@@ -235,7 +235,7 @@ export class JiraApiClient {
       const result = await this.cachedRequest(
         `boards_${projectKey}`,
         async () => {
-          const response: AxiosResponse<{ values: JiraBoard[] }> = await this.client.get(
+          const response: any = await this.client.get(
             `/rest/agile/1.0/board?projectKeyOrId=${projectKey}&type=scrum`
           );
           return response.data;
@@ -332,7 +332,7 @@ export class JiraApiClient {
     return this.cachedRequest(
       `active_sprint_${boardId}`,
       async () => {
-        const response: AxiosResponse<{ values: JiraSprint[] }> = await this.client.get(
+        const response: any = await this.client.get(
           `/rest/agile/1.0/board/${boardId}/sprint?state=active`
         );
         return response.data.values.length > 0 ? response.data.values[0] : null;
@@ -348,7 +348,7 @@ export class JiraApiClient {
     return this.cachedRequest(
       `sprint_${sprintId}`,
       async () => {
-        const response: AxiosResponse<JiraSprint> = await this.client.get(`/rest/agile/1.0/sprint/${sprintId}`);
+        const response: any = await this.client.get(`/rest/agile/1.0/sprint/${sprintId}`);
         return response.data;
       },
       300000 // 5 minutes cache for specific sprints
@@ -362,7 +362,7 @@ export class JiraApiClient {
     return this.cachedRequest(
       `sprint_issues_${sprintId}`,
       async () => {
-        const response: AxiosResponse<{ issues: JiraIssue[] }> = await this.client.get(
+        const response: any = await this.client.get(
           `/rest/agile/1.0/sprint/${sprintId}/issue?maxResults=1000&expand=changelog`
         );
         return response.data;
@@ -378,7 +378,7 @@ export class JiraApiClient {
     return this.cachedRequest(
       `sprint_history_${boardId}_${limit}`,
       async () => {
-        const response: AxiosResponse<{ values: JiraSprint[] }> = await this.client.get(
+        const response: any = await this.client.get(
           `/rest/agile/1.0/board/${boardId}/sprint?state=closed&maxResults=${limit}&orderBy=-created`
         );
         return response.data;
@@ -397,7 +397,7 @@ export class JiraApiClient {
       `search_${Buffer.from(jql).toString('base64')}_${maxResults}`,
       async () => {
         const encodedJql = encodeURIComponent(jql);
-        const response: AxiosResponse<{ issues: JiraIssue[]; total: number }> = await this.client.get(
+        const response: any = await this.client.get(
           `/rest/api/3/search?jql=${encodedJql}&maxResults=${maxResults}&expand=${expand}`
         );
         return response.data;
