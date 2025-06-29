@@ -1,8 +1,8 @@
 {
-  "name": "jira-mcp-server",
-  "version": "1.0.0",
-  "description": "Simple Jira MCP Server with API Token Authentication",
-  "main": "dist/index.js",
+  "name": "jira-mcp-oauth",
+  "version": "4.1.0",
+  "description": "Jira MCP Server with OAuth Browser Authentication - Individual User Access",
+  "main": "dist/src/index.js",
   "module": "./src/index.ts",
   "type": "module",
   "scripts": {
@@ -25,6 +25,8 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
     "@types/node": "^20.14.2",
     "tsx": "^4.7.0",
     "typescript": "^5.4.5"
