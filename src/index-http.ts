@@ -273,19 +273,102 @@ class JiraMCPServer {
       });
     });
 
+    // Configuration schema endpoint - CRITICAL for Smithery
+    app.get('/config-schema', (req, res) => {
+      res.json({
+        type: "object",
+        properties: {
+          companyUrl: {
+            type: "string",
+            title: "Company Jira URL",
+            description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+          },
+          userEmail: {
+            type: "string",
+            title: "Your Email",
+            description: "Your work email address"
+          },
+          authMethod: {
+            type: "string",
+            enum: ["oauth", "token"],
+            default: "oauth",
+            description: "OAuth (recommended) or API Token (fallback)"
+          },
+          jiraApiToken: {
+            type: "string",
+            description: "Only needed if OAuth fails. Get from: https://id.atlassian.com/manage-profile/security/api-tokens"
+          }
+        },
+        required: ["companyUrl", "userEmail"]
+      });
+    });
+
     // Server info
     app.get('/info', (req, res) => {
       res.json({
         name: 'jira-mcp-http',
         version: '3.0.0',
         description: 'Jira MCP Server - Smithery Compatible',
-        tools: ['test_jira_connection', 'jira_get_issue', 'jira_search', 'list_projects', 'help']
+        tools: ['test_jira_connection', 'jira_get_issue', 'jira_search', 'list_projects', 'help'],
+        configSchema: '/config-schema'
       });
     });
     // MCP endpoint for Smithery
     app.all('/mcp', async (req, res) => {
       try {
-        console.log('🔗 MCP Request:', req.method, req.url);
+        console.log('🔗 MCP Request:', req.method, req.url, 'Body:', req.body);
+        
+        // Handle schema requests first
+        if (req.body && req.body.method === 'initialize') {
+          console.log('📋 Schema request detected');
+          
+          // Return initialization with config schema
+          const initResponse = {
+            jsonrpc: '2.0',
+            id: req.body.id,
+            result: {
+              protocolVersion: '2024-11-05',
+              capabilities: {
+                tools: {},
+                server: {
+                  configSchema: {
+                    type: "object",
+                    properties: {
+                      companyUrl: {
+                        type: "string",
+                        title: "Company Jira URL",
+                        description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+                      },
+                      userEmail: {
+                        type: "string",
+                        title: "Your Email",
+                        description: "Your work email address"
+                      },
+                      authMethod: {
+                        type: "string",
+                        enum: ["oauth", "token"],
+                        default: "oauth",
+                        description: "OAuth (recommended) or API Token (fallback)"
+                      },
+                      jiraApiToken: {
+                        type: "string",
+                        description: "Only needed if OAuth fails. Get from: https://id.atlassian.com/manage-profile/security/api-tokens"
+                      }
+                    },
+                    required: ["companyUrl", "userEmail"]
+                  }
+                }
+              },
+              serverInfo: {
+                name: 'jira-mcp-http',
+                version: '3.0.0'
+              }
+            }
+          };
+          
+          res.json(initResponse);
+          return;
+        }
         
         // Extract and parse Smithery config
         const configParam = req.query.config as string | undefined;
@@ -382,10 +465,8 @@ class JiraMCPServer {
 }
 
 // Start server
-if (import.meta.url === 'file://' + process.argv[1]) {
-  const httpServer = new JiraMCPServer();
-  httpServer.startHttpServer().catch((error) => {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  });
-}
+const httpServer = new JiraMCPServer();
+httpServer.startHttpServer().catch((error) => {
+  console.error('❌ Failed to start server:', error);
+  process.exit(1);
+});
