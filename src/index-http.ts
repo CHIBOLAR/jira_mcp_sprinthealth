@@ -375,6 +375,39 @@ class JiraMCPServer {
       });
     });
 
+    // Tools endpoint for Smithery
+    app.get('/tools', (req, res) => {
+      res.json({
+        tools: [
+          {
+            name: 'test_jira_connection',
+            description: 'Test connection to Jira instance and verify credentials',
+            inputSchema: { type: 'object', properties: {}, required: [] }
+          },
+          {
+            name: 'jira_get_issue',
+            description: 'Get details for a specific Jira issue',
+            inputSchema: { type: 'object', properties: { issueKey: { type: 'string', description: 'Jira issue key (e.g., "PROJ-123")' } }, required: ['issueKey'] }
+          },
+          {
+            name: 'jira_search',
+            description: 'Search Jira issues using JQL',
+            inputSchema: { type: 'object', properties: { jql: { type: 'string', description: 'JQL query string' } }, required: ['jql'] }
+          },
+          {
+            name: 'list_projects',
+            description: 'List all accessible Jira projects',
+            inputSchema: { type: 'object', properties: {}, required: [] }
+          },
+          {
+            name: 'help',
+            description: 'Show usage guide',
+            inputSchema: { type: 'object', properties: {}, required: [] }
+          }
+        ]
+      });
+    });
+
     // MCP endpoint for Smithery
     app.all('/mcp', async (req, res) => {
       try {
