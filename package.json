@@ -1,7 +1,7 @@
 {
   "name": "jira-mcp-mvp",
   "version": "3.0.0",
-  "description": "Comprehensive Jira MCP Server - 26 tools for complete Jira automation: CRUD operations, bulk processing, configuration management, and advanced analytics",
+  "description": "Comprehensive Jira MCP Server - 29 tools for complete Jira automation: CRUD operations, bulk processing, configuration management, and advanced analytics",
   "main": "src/index-http.ts",
   "module": "./src/index-http.ts",
   "type": "module",
@@ -30,7 +30,7 @@
     "issue-management",
     "workflow-automation",
     "smithery-compatible",
-    "26-tools",
+    "29-tools",
     "production-ready"
   ],
   "author": "Your Name",
@@ -41,14 +41,15 @@
     "commander": "^11.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "express": "^4.18.2",
     "uuid": "^11.1.0",
-    "ws": "^8.18.2",
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
     "@types/node": "^20.14.2",
     "@types/uuid": "^10.0.0",
-    "@types/ws": "^8.18.1",
     "nodemon": "^3.1.10",
     "rimraf": "^5.0.7",
     "tsx": "^4.15.4",
