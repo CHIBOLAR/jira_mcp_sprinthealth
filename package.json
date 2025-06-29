@@ -1,7 +1,7 @@
 {
   "name": "jira-mcp-mvp",
-  "version": "2.0.0",
-  "description": "Enhanced Jira Sprint Dashboard MCP Server - Advanced analytics, predictive insights, and production-ready features",
+  "version": "3.0.0",
+  "description": "Comprehensive Jira MCP Server - 26 tools for complete Jira automation: CRUD operations, bulk processing, configuration management, and advanced analytics",
   "main": "src/index-smithery.ts",
   "module": "./src/index-smithery.ts",
   "type": "module",
@@ -15,6 +15,9 @@
   "keywords": [
     "mcp",
     "jira",
+    "comprehensive-tools",
+    "crud-operations",
+    "bulk-processing",
     "sprint",
     "analytics",
     "dashboard",
@@ -22,9 +25,10 @@
     "velocity",
     "agile",
     "atlassian",
-    "predictive-analytics",
-    "anomaly-detection",
-    "portfolio-analysis",
+    "issue-management",
+    "workflow-automation",
+    "smithery-compatible",
+    "26-tools",
     "production-ready"
   ],
   "author": "Your Name",
