@@ -34,7 +34,7 @@ coverage/
 # Ignore development configs
 .eslintrc*
 .prettierrc*
-tsconfig.json
+# tsconfig.json - NEEDED for Docker build
 
 # Ignore documentation
 README*.md
