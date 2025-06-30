@@ -5,7 +5,7 @@ description: "Multi-tenant Jira MCP Server with Browser OAuth - Works with ANY J
 
 # Use TypeScript runtime with OAuth-enabled server
 runtime: "typescript"
-entrypoint: "src/smithery-oauth-server.ts"
+entrypoint: "src/index.ts"
 
 startCommand:
   type: "http"

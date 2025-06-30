@@ -273,8 +273,8 @@ function buildOAuthUrl(companyUrl: string): string | null {
   return `https://auth.atlassian.com/authorize?${params.toString()}`;
 }
 
-// Start minimal HTTP server for OAuth callbacks when running directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Start minimal HTTP server for OAuth callbacks only when explicitly requested
+if (process.env.START_HTTP_SERVER === 'true' || process.argv.includes('--http-server')) {
   const PORT = parseInt(process.env.PORT || '3000');
   const app = express();
   
