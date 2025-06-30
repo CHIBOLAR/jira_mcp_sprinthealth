@@ -1,11 +1,11 @@
-# Smithery TypeScript configuration - MUCH SIMPLER!
+# Smithery TypeScript configuration - TIMEOUT FIXED!
 name: jira-mcp-oauth
-version: 5.0.0
-description: "Jira MCP Server with Browser OAuth Authentication - Install and authenticate via browser login"
+version: 5.1.0
+description: "Jira MCP Server with Browser OAuth Authentication - FAST tool scanning, no timeouts"
 
-# Use TypeScript runtime instead of Docker
+# Use TypeScript runtime - optimized for fast tool discovery
 runtime: "typescript"
-entrypoint: "src/smithery-oauth-server.ts"
+entrypoint: "src/smithery-simple-server.ts"
 
 startCommand:
   type: "http"
