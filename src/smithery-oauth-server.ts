@@ -66,10 +66,14 @@ class SmitheryJiraMCPServer {
       issuer_url: process.env.OAUTH_ISSUER_URL || 'https://auth.atlassian.com',
       authorization_url: process.env.OAUTH_AUTHORIZATION_URL || 'https://auth.atlassian.com/authorize',
       token_url: process.env.OAUTH_TOKEN_URL || 'https://auth.atlassian.com/oauth/token',
-      client_id: process.env.OAUTH_CLIENT_ID,
-      client_secret: process.env.OAUTH_CLIENT_SECRET,
-      redirect_uri: process.env.THIS_HOSTNAME + '/oauth/callback'
+      client_id: process.env.OAUTH_CLIENT_ID || '',
+      client_secret: process.env.OAUTH_CLIENT_SECRET || '',
+      redirect_uri: (process.env.THIS_HOSTNAME || 'http://localhost:3000') + '/oauth/callback'
     };
+    
+    console.log('🔐 OAuth Config Loaded:');
+    console.log('   Client ID:', this.oauthConfig.client_id ? 'Configured' : 'Missing');
+    console.log('   Redirect URI:', this.oauthConfig.redirect_uri);
   }
 
   private setupErrorHandling(): void {
@@ -306,24 +310,28 @@ class SmitheryJiraMCPServer {
 
     // Configuration schema for Smithery
     app.get('/config-schema', (req, res) => {
+      res.setHeader('Content-Type', 'application/json');
       res.json({
         type: "object",
         properties: {
           companyUrl: {
             type: "string",
             title: "Company Jira URL",
-            description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+            description: "Your company's Jira URL (e.g., https://company.atlassian.net)",
+            placeholder: "https://your-company.atlassian.net"
           },
           userEmail: {
             type: "string",
             title: "Your Email", 
-            description: "Your work email address"
+            description: "Your work email address",
+            placeholder: "user@company.com"
           },
           authMethod: {
             type: "string",
-            enum: ["oauth", "token"],
+            enum: ["oauth"],
             default: "oauth",
-            description: "OAuth (recommended) or API Token (fallback)"
+            title: "Authentication Method",
+            description: "Browser OAuth (automatic token retrieval)"
           }
         },
         required: ["companyUrl", "userEmail"]
@@ -502,17 +510,23 @@ class SmitheryJiraMCPServer {
     });
 
     // Start server
-    return new Promise((resolve) => {
-      app.listen(PORT, HOST, () => {
+    return new Promise((resolve, reject) => {
+      const server = app.listen(PORT, HOST, () => {
         console.log('\n🚀 Smithery OAuth Jira MCP Server Started!');
         console.log('📍 Server URL: http://' + HOST + ':' + PORT);
         console.log('🔗 MCP Endpoint: http://' + HOST + ':' + PORT + '/mcp');
         console.log('🔐 OAuth Callback: http://' + HOST + ':' + PORT + '/oauth/callback');
+        console.log('📋 Config Schema: http://' + HOST + ':' + PORT + '/config-schema');
         console.log('\n⚙️ OAuth Configuration:');
         console.log('   Client ID: ' + (this.oauthConfig.client_id ? 'Configured' : 'Missing'));
         console.log('   Authorization URL: ' + this.oauthConfig.authorization_url);
         console.log('\n✅ Ready for Smithery deployment with OAuth!');
         resolve();
+      });
+      
+      server.on('error', (error) => {
+        console.error('❌ Server startup error:', error);
+        reject(error);
       });
     });
   }
