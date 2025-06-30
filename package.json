@@ -2,16 +2,16 @@
   "name": "jira-mcp-oauth",
   "version": "5.0.0",
   "description": "Jira MCP Server with Browser OAuth Authentication for Smithery",
-  "main": "dist/src/index.js",
-  "module": "./src/index.ts",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/src/index.js",
     "dev": "tsx src/index.ts",
-    "dev-oauth": "tsx src/smithery-oauth-server.ts",
     "test": "node --test",
-    "test-oauth": "node test-oauth-flow.js",
+    "smithery:dev": "npx @smithery/cli dev src/index.ts",
+    "smithery:build": "npx @smithery/cli build src/index.ts",
     "prepare": "npm run build"
   },
   "keywords": [
