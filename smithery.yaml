@@ -1,6 +1,6 @@
 # Smithery TypeScript configuration - TIMEOUT FIXED!
 name: jira-mcp-oauth
-version: 5.2.0
+version: 5.3.0
 description: "Jira MCP Server with Browser OAuth Authentication - FAST tool scanning, no timeouts"
 
 # Use TypeScript runtime with OAuth-enabled server
