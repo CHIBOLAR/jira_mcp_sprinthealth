@@ -443,8 +443,12 @@ class SmitheryJiraMCPServer {
       });
     });
 
-    // MCP endpoint
+    // MCP endpoint - simplified to prevent hanging
     app.all('/mcp', async (req, res) => {
+      // Set timeout to prevent hanging
+      req.setTimeout(30000); // 30 second timeout
+      res.setTimeout(30000);
+      
       try {
         // Handle Smithery configuration passed via query parameters
         let smitheryConfig = null;
@@ -459,7 +463,7 @@ class SmitheryJiraMCPServer {
           }
         }
 
-        // Handle MCP initialization with config schema
+        // Handle MCP initialization with config schema - respond immediately
         if (req.body && req.body.method === 'initialize') {
           const initResponse = {
             jsonrpc: '2.0',
@@ -504,47 +508,73 @@ class SmitheryJiraMCPServer {
           return;
         }
 
-        // Handle regular MCP transport
-        const sessionId = req.headers['mcp-session-id'] as string | undefined;
-        let transport: StreamableHTTPServerTransport;
-
-        if (sessionId && transports[sessionId]) {
-          transport = transports[sessionId];
-        } else {
-          transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+        // For non-initialize requests, create simple transport without hanging
+        const sessionId = req.headers['mcp-session-id'] as string || 'default';
+        
+        if (!transports[sessionId]) {
+          console.log('🔗 Creating new transport for session:', sessionId);
+          
+          const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => sessionId,
           });
 
-          if (sessionId) {
-            transports[sessionId] = transport;
+          transports[sessionId] = transport;
+          
+          // Connect with timeout to prevent hanging
+          const connectPromise = this.mcpServer.connect(transport);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Connection timeout')), 5000)
+          );
+          
+          try {
+            await Promise.race([connectPromise, timeoutPromise]);
+            console.log('✅ MCP server connected for session:', sessionId);
+          } catch (error) {
+            console.error('❌ MCP connection failed:', error);
+            // Continue anyway to prevent hanging
           }
-
-          transport.onclose = () => {
-            if (transport.sessionId && transports[transport.sessionId]) {
-              delete transports[transport.sessionId];
-            }
-          };
-
-          await this.mcpServer.connect(transport);
         }
 
-        await transport.handleRequest(req, res, req.body);
+        const transport = transports[sessionId];
+        if (transport) {
+          // Handle request with timeout
+          const handlePromise = transport.handleRequest(req, res, req.body);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), 10000)
+          );
+          
+          await Promise.race([handlePromise, timeoutPromise]);
+        } else {
+          throw new Error('No transport available');
+        }
         
       } catch (error) {
         console.error('❌ MCP Error:', error);
         if (!res.headersSent) {
           res.status(500).json({
             jsonrpc: '2.0',
-            error: { code: -32603, message: 'Internal server error' },
-            id: null,
+            error: { 
+              code: -32603, 
+              message: 'Internal server error: ' + (error instanceof Error ? error.message : String(error))
+            },
+            id: req.body?.id || null,
           });
         }
       }
     });
 
-    // Start server
+    // Start server with timeout protection
     return new Promise((resolve, reject) => {
+      console.log('🚀 Starting Smithery OAuth Jira MCP Server...');
+      console.log('📍 Binding to:', HOST + ':' + PORT);
+      
+      // Add startup timeout
+      const startupTimeout = setTimeout(() => {
+        reject(new Error('Server startup timeout after 30 seconds'));
+      }, 30000);
+      
       const server = app.listen(PORT, HOST, () => {
+        clearTimeout(startupTimeout);
         console.log('\n🚀 Smithery OAuth Jira MCP Server Started!');
         console.log('📍 Server URL: http://' + HOST + ':' + PORT);
         console.log('🔗 MCP Endpoint: http://' + HOST + ':' + PORT + '/mcp');
@@ -558,8 +588,24 @@ class SmitheryJiraMCPServer {
       });
       
       server.on('error', (error) => {
+        clearTimeout(startupTimeout);
         console.error('❌ Server startup error:', error);
         reject(error);
+      });
+      
+      // Handle graceful shutdown
+      process.on('SIGTERM', () => {
+        console.log('🛑 Received SIGTERM, shutting down gracefully...');
+        server.close(() => {
+          process.exit(0);
+        });
+      });
+      
+      process.on('SIGINT', () => {
+        console.log('🛑 Received SIGINT, shutting down gracefully...');
+        server.close(() => {
+          process.exit(0);
+        });
       });
     });
   }
@@ -589,9 +635,31 @@ class SmitheryJiraMCPServer {
   }
 }
 
-// Start the Smithery OAuth server
+// Start the Smithery OAuth server with comprehensive error handling
+console.log('🔄 Initializing Smithery OAuth Jira MCP Server...');
+console.log('📊 Environment:', {
+  NODE_ENV: process.env.NODE_ENV || 'development',
+  PORT: process.env.PORT || '3000',
+  SMITHERY_HOSTNAME: process.env.SMITHERY_HOSTNAME || 'Not set',
+  OAUTH_CLIENT_ID: process.env.OAUTH_CLIENT_ID ? 'Configured' : 'Missing'
+});
+
 const smitheryServer = new SmitheryJiraMCPServer();
-smitheryServer.startHttpServer().catch((error) => {
+
+// Start with timeout and proper error handling
+Promise.race([
+  smitheryServer.startHttpServer(),
+  new Promise((_, reject) => 
+    setTimeout(() => reject(new Error('Overall startup timeout after 60 seconds')), 60000)
+  )
+]).then(() => {
+  console.log('🎉 Server startup completed successfully!');
+}).catch((error) => {
   console.error('❌ Failed to start Smithery OAuth server:', error);
+  console.error('📊 Error details:', {
+    name: error.name,
+    message: error.message,
+    stack: error.stack?.substring(0, 500) + '...'
+  });
   process.exit(1);
 });
