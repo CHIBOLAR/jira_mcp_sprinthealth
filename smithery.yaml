@@ -3,9 +3,9 @@ name: jira-mcp-oauth
 version: 5.1.0
 description: "Jira MCP Server with Browser OAuth Authentication - FAST tool scanning, no timeouts"
 
-# Use TypeScript runtime - optimized for fast tool discovery
+# Use TypeScript runtime with proper module export (NOT HTTP server)
 runtime: "typescript"
-entrypoint: "src/smithery-simple-server.ts"
+entrypoint: "src/index.ts"
 
 startCommand:
   type: "http"

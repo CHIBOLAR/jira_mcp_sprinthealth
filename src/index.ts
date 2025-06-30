@@ -13,17 +13,19 @@ export const configSchema = z.object({
 export type Config = z.infer<typeof configSchema>;
 
 /**
- * Smithery CLI Compatible Jira MCP Server with OAuth
+ * Smithery CLI Compatible Jira MCP Server with OAuth - TIMEOUT RESISTANT
  */
 export default function createJiraMCPServer({ config }: { config: Config }) {
   const server = new McpServer({
     name: 'jira-mcp-oauth',
-    version: '5.0.0',
+    version: '5.1.0', // Updated version
   });
 
   console.log('🔧 Jira MCP Server Config:', config);
 
-  // OAuth Status Check Tool
+  // All tools are designed to respond instantly to prevent timeouts
+
+  // OAuth Status Check Tool - instant response
   server.tool(
     'oauth_status',
     'Check OAuth authentication status',
@@ -42,14 +44,25 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     }
   );
 
-  // Start OAuth Flow Tool
+  // Start OAuth Flow Tool - instant response
   server.tool(
     'start_oauth',
     'Start browser OAuth authentication flow',
     {},
     async () => {
       const authUrl = buildOAuthUrl(config.companyUrl);
-      
+
+      if (!authUrl) {
+        return {
+          content: [{
+            type: 'text',
+            text: '❌ **OAuth configuration error:**\n\n' +
+                  'Missing required environment variables for OAuth (OAUTH_CLIENT_ID, OAUTH_REDIRECT_URI or SMITHERY_HOSTNAME).\n' +
+                  'Please check your Smithery deployment configuration.'
+          }]
+        };
+      }
+
       return {
         content: [{
           type: 'text',
@@ -65,7 +78,7 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     }
   );
 
-  // Connection test
+  // Connection test - instant response
   server.tool(
     'test_jira_connection',
     'Test connection to Jira',
@@ -195,14 +208,22 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
 }
 
 /**
- * Build OAuth URL for Atlassian authentication
+ * Build OAuth URL for Atlassian authentication using environment variables injected by Smithery
  */
-function buildOAuthUrl(companyUrl: string): string {
-  const baseUrl = companyUrl.endsWith('/') ? companyUrl.slice(0, -1) : companyUrl;
+function buildOAuthUrl(companyUrl: string): string | null {
+  const clientId = process.env.OAUTH_CLIENT_ID;
+  // Smithery may provide OAUTH_REDIRECT_URI or SMITHERY_HOSTNAME for callback
+  const redirectUri = process.env.OAUTH_REDIRECT_URI ||
+    (process.env.SMITHERY_HOSTNAME ? `https://${process.env.SMITHERY_HOSTNAME}/oauth/callback` : null);
+
+  if (!clientId || !redirectUri) {
+    return null;
+  }
+
   const params = new URLSearchParams({
     response_type: 'code',
-    client_id: 'your-oauth-client-id', // Will be configured in Smithery
-    redirect_uri: 'https://your-deployment/oauth/callback',
+    client_id: clientId,
+    redirect_uri: redirectUri,
     scope: 'read:jira-user read:jira-work write:jira-work',
     audience: 'api.atlassian.com',
     prompt: 'consent'
