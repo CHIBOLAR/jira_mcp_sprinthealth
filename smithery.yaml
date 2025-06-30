@@ -1,7 +1,7 @@
-# Smithery TypeScript configuration - TIMEOUT FIXED!
+# Smithery TypeScript configuration - MULTI-TENANT READY!
 name: jira-mcp-oauth
-version: 5.3.0
-description: "Jira MCP Server with Browser OAuth Authentication - FAST tool scanning, no timeouts"
+version: 5.4.0
+description: "Multi-tenant Jira MCP Server with Browser OAuth - Works with ANY Jira instance!"
 
 # Use TypeScript runtime with OAuth-enabled server
 runtime: "typescript"
@@ -32,14 +32,21 @@ startCommand:
 
 # Installation instructions for users
 instructions: |
-  ## 🚀 Installation Steps:
+  ## 🚀 Multi-Tenant Installation Steps:
   
-  1. **Configure** your Jira URL and email in the form above
-  2. **Install** this MCP server from Smithery
-  3. **Open Claude Desktop** - the server will be auto-configured
-  4. **Run the tool** `start_oauth` to begin browser authentication
-  5. **Login** with your Atlassian account in the browser
-  6. **Done!** Your Jira is now connected to Claude
+  1. **Enter YOUR Jira URL** (e.g., https://your-company.atlassian.net) in the form above
+  2. **Enter YOUR email** address that you use to log into Jira
+  3. **Install** this MCP server from Smithery
+  4. **Open Claude Desktop** - the server will be auto-configured for YOUR Jira instance
+  5. **Run the tool** `start_oauth` to begin browser authentication
+  6. **Login** with YOUR Atlassian account in the browser
+  7. **Done!** YOUR Jira is now connected to Claude
+  
+  ## 🌐 Works with ANY Jira Instance:
+  - ✅ your-company.atlassian.net
+  - ✅ startup-name.atlassian.net  
+  - ✅ enterprise-corp.atlassian.net
+  - ✅ ANY Atlassian Cloud Jira!
   
   ## 🛠️ Available Tools:
   - `oauth_status` - Check authentication status
@@ -50,4 +57,4 @@ instructions: |
   - `list_projects` - List your projects
   - `help` - Get usage help
   
-  ## ⚡ No API tokens needed - just browser login!
+  ## ⚡ No API tokens needed - just provide YOUR Jira URL and browser login!

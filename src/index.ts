@@ -18,7 +18,7 @@ export type Config = z.infer<typeof configSchema>;
 export default function createJiraMCPServer({ config }: { config: Config }) {
   const server = new McpServer({
     name: 'jira-mcp-oauth',
-    version: '5.1.0', // Updated version
+    version: '5.4.0', // Multi-tenant ready
   });
 
   console.log('🔧 Jira MCP Server Config:', config);
@@ -108,14 +108,18 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
       issueKey: z.string().describe('Jira issue key (e.g., "PROJ-123")')
     },
     async ({ issueKey }) => {
+      // Extract Jira domain from user's company URL
+      const jiraDomain = extractJiraDomain(config.companyUrl);
+      
       return {
         content: [{
           type: 'text',
           text: `📋 **Issue: ${issueKey}**\n\n` +
                 `**Company:** ${config.companyUrl}\n` +
+                `**Jira Domain:** ${jiraDomain}\n` +
                 `**User:** ${config.userEmail}\n\n` +
                 '✅ **OAuth Authenticated Request**\n' +
-                '🔗 **Using access tokens**\n\n' +
+                `🔗 **API URL:** https://api.atlassian.com/ex/jira/${jiraDomain}/rest/api/3/issue/${issueKey}\n\n` +
                 '(In production: Real Jira API data would be shown here)\n\n' +
                 '**Note:** Complete OAuth authentication first using **start_oauth**'
         }]
@@ -131,14 +135,18 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
       jql: z.string().describe('JQL query (e.g., "project = PROJ AND status = Open")')
     },
     async ({ jql }) => {
+      // Extract Jira domain from user's company URL
+      const jiraDomain = extractJiraDomain(config.companyUrl);
+      
       return {
         content: [{
           type: 'text',
           text: `🔍 **Jira Search: ${jql}**\n\n` +
                 `**Company:** ${config.companyUrl}\n` +
+                `**Jira Domain:** ${jiraDomain}\n` +
                 `**User:** ${config.userEmail}\n\n` +
                 '✅ **OAuth Authenticated Search**\n' +
-                '🔗 **Using access tokens**\n\n' +
+                `🔗 **API URL:** https://api.atlassian.com/ex/jira/${jiraDomain}/rest/api/3/search?jql=${encodeURIComponent(jql)}\n\n` +
                 '(In production: Real search results would be shown here)\n\n' +
                 '**Note:** Complete OAuth authentication first using **start_oauth**'
         }]
@@ -152,14 +160,18 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     'List accessible Jira projects',
     {},
     async () => {
+      // Extract Jira domain from user's company URL
+      const jiraDomain = extractJiraDomain(config.companyUrl);
+      
       return {
         content: [{
           type: 'text',
           text: '📂 **Jira Projects**\n\n' +
                 `**Company:** ${config.companyUrl}\n` +
+                `**Jira Domain:** ${jiraDomain}\n` +
                 `**User:** ${config.userEmail}\n\n` +
                 '✅ **OAuth Authenticated Request**\n' +
-                '🔗 **Using access tokens**\n\n' +
+                `🔗 **API URL:** https://api.atlassian.com/ex/jira/${jiraDomain}/rest/api/3/project\n\n` +
                 '(In production: Real project list would be shown here)\n\n' +
                 '**Note:** Complete OAuth authentication first using **start_oauth**'
         }]
@@ -205,6 +217,22 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
   );
 
   return server;
+}
+
+/**
+ * Extract Jira domain from company URL
+ * Examples:
+ * - "https://company.atlassian.net" -> "company.atlassian.net"
+ * - "company.atlassian.net" -> "company.atlassian.net"
+ */
+function extractJiraDomain(companyUrl: string): string {
+  // Remove protocol if present
+  let domain = companyUrl.replace(/^https?:\/\//, '');
+  
+  // Remove trailing slash if present
+  domain = domain.replace(/\/$/, '');
+  
+  return domain;
 }
 
 /**
