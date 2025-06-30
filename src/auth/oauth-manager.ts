@@ -81,7 +81,21 @@ export class JiraOAuthManager {
    * Get default redirect URI
    */
   private getDefaultRedirectUri(): string {
-    const serverUrl = process.env.SERVER_URL || 'http://localhost:3000';
+    // Priority order for redirect URI:
+    // 1. OAUTH_REDIRECT_URI (explicit override)
+    // 2. SMITHERY_HOSTNAME (Smithery deployment)
+    // 3. SERVER_URL (general server URL)
+    // 4. Localhost fallback
+    
+    if (process.env.OAUTH_REDIRECT_URI) {
+      return process.env.OAUTH_REDIRECT_URI;
+    }
+    
+    if (process.env.SMITHERY_HOSTNAME) {
+      return `https://${process.env.SMITHERY_HOSTNAME}/oauth/callback`;
+    }
+    
+    const serverUrl = process.env.SERVER_URL || process.env.THIS_HOSTNAME || 'http://localhost:3000';
     return `${serverUrl}/oauth/callback`;
   }
 

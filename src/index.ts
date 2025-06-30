@@ -4,6 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import express from 'express';
 import cors from 'cors';
+import { JiraOAuthManager } from './auth/oauth-manager.js';
 
 // Configuration schema for Smithery CLI
 export const configSchema = z.object({
@@ -25,6 +26,13 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
 
   console.log('🔧 Jira MCP Server Config:', config);
 
+  // Initialize OAuth Manager with proper configuration
+  const oauthManager = new JiraOAuthManager(config.companyUrl, {
+    clientId: process.env.OAUTH_CLIENT_ID || process.env.JIRA_OAUTH_CLIENT_ID,
+    clientSecret: process.env.OAUTH_CLIENT_SECRET || process.env.JIRA_OAUTH_CLIENT_SECRET,
+    redirectUri: process.env.OAUTH_REDIRECT_URI || `${process.env.SERVER_URL || 'http://localhost:3000'}/oauth/callback`,
+  });
+
   // All tools are designed to respond instantly to prevent timeouts
 
   // OAuth Status Check Tool - instant response
@@ -33,6 +41,9 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     'Check OAuth authentication status',
     {},
     async () => {
+      const stats = oauthManager.getStats();
+      const metadata = oauthManager.getResourceMetadata();
+      
       return {
         content: [{
           type: 'text',
@@ -40,6 +51,16 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
                 `**Company URL:** ${config.companyUrl}\n` +
                 `**User Email:** ${config.userEmail}\n` +
                 `**Auth Method:** ${config.authMethod}\n\n` +
+                `**OAuth Configuration:**\n` +
+                `• Authorization URL: ${stats.config.authorizationUrl}\n` +
+                `• Redirect URI: ${stats.config.redirectUri}\n` +
+                `• Scopes: ${stats.config.scopes.join(', ')}\n` +
+                `• Active Sessions: ${stats.activeSessions}\n\n` +
+                '**Environment Variables:**\n' +
+                `• CLIENT_ID: ${process.env.OAUTH_CLIENT_ID ? '✅ Set' : '❌ Missing'}\n` +
+                `• CLIENT_SECRET: ${process.env.OAUTH_CLIENT_SECRET ? '✅ Set' : '❌ Missing'}\n` +
+                `• REDIRECT_URI: ${process.env.OAUTH_REDIRECT_URI || 'Using default'}\n` +
+                `• SERVER_URL: ${process.env.SERVER_URL || 'Using default'}\n\n` +
                 'User can now authenticate via browser.'
         }]
       };
@@ -52,31 +73,32 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     'Start browser OAuth authentication flow',
     {},
     async () => {
-      const authUrl = buildOAuthUrl(config.companyUrl);
+      try {
+        const { authUrl, state } = oauthManager.generateAuthUrl(config.userEmail);
 
-      if (!authUrl) {
+        return {
+          content: [{
+            type: 'text',
+            text: '🚀 **OAuth Authentication Started**\n\n' +
+                  '1. **Click this link** to authenticate with Atlassian:\n' +
+                  authUrl + '\n\n' +
+                  '2. **Grant permissions** to access your Jira\n' +
+                  '3. **Return here** - your tokens will be automatically configured\n\n' +
+                  `**Company:** ${config.companyUrl}\n` +
+                  `**Email:** ${config.userEmail}\n` +
+                  `**State:** ${state}`
+          }]
+        };
+      } catch (error) {
         return {
           content: [{
             type: 'text',
             text: '❌ **OAuth configuration error:**\n\n' +
-                  'Missing required environment variables for OAuth (OAUTH_CLIENT_ID, OAUTH_REDIRECT_URI or SMITHERY_HOSTNAME).\n' +
-                  'Please check your Smithery deployment configuration.'
+                  `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
+                  'Please check your OAuth configuration and try again.'
           }]
         };
       }
-
-      return {
-        content: [{
-          type: 'text',
-          text: '🚀 **OAuth Authentication Started**\n\n' +
-                '1. **Click this link** to authenticate with Atlassian:\n' +
-                authUrl + '\n\n' +
-                '2. **Grant permissions** to access your Jira\n' +
-                '3. **Return here** - your tokens will be automatically configured\n\n' +
-                `**Company:** ${config.companyUrl}\n` +
-                `**Email:** ${config.userEmail}`
-        }]
-      };
     }
   );
 
@@ -237,42 +259,6 @@ function extractJiraDomain(companyUrl: string): string {
   return domain;
 }
 
-/**
- * Build OAuth URL for Atlassian authentication using environment variables injected by Smithery
- */
-function buildOAuthUrl(companyUrl: string): string | null {
-  // OAuth app credentials with fallbacks for Smithery deployment
-  const getAppCredentials = () => {
-    // Split OAuth credentials to avoid GitHub secret detection
-    const clientIdParts = ['EiNH97tf', 'yGyZPla', 'MfrteiK', 'eW2TXWV', 'xFf'];
-    return clientIdParts.join('');
-  };
-  
-  const clientId = process.env.OAUTH_CLIENT_ID || getAppCredentials();
-  
-  // Smithery may provide OAUTH_REDIRECT_URI or SMITHERY_HOSTNAME for callback
-  const port = process.env.PORT || '3000';
-  const hostname = process.env.THIS_HOSTNAME || `http://localhost:${port}`;
-  const redirectUri = process.env.OAUTH_REDIRECT_URI ||
-    (process.env.SMITHERY_HOSTNAME ? `https://${process.env.SMITHERY_HOSTNAME}/oauth/callback` : null) ||
-    `${hostname}/oauth/callback`; // Use configured hostname and port
-
-  if (!clientId || !redirectUri) {
-    return null;
-  }
-
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    scope: 'read:jira-user read:jira-work write:jira-work',
-    audience: 'api.atlassian.com',
-    prompt: 'consent'
-  });
-
-  return `https://auth.atlassian.com/authorize?${params.toString()}`;
-}
-
 // Start minimal HTTP server for OAuth callbacks only when explicitly requested
 if (process.env.START_HTTP_SERVER === 'true' || process.argv.includes('--http-server')) {
   const PORT = parseInt(process.env.PORT || '3000');
@@ -281,45 +267,75 @@ if (process.env.START_HTTP_SERVER === 'true' || process.argv.includes('--http-se
   app.use(cors());
   app.use(express.json());
   
+  // Initialize OAuth manager for callback handling
+  const callbackOAuthManager = new JiraOAuthManager(process.env.JIRA_URL || 'https://codegenie.atlassian.net', {
+    clientId: process.env.OAUTH_CLIENT_ID || process.env.JIRA_OAUTH_CLIENT_ID,
+    clientSecret: process.env.OAUTH_CLIENT_SECRET || process.env.JIRA_OAUTH_CLIENT_SECRET,
+    redirectUri: process.env.OAUTH_REDIRECT_URI || `${process.env.SERVER_URL || 'http://localhost:3000'}/oauth/callback`,
+  });
+  
   // OAuth callback endpoint
-  app.get('/oauth/callback', (req, res) => {
+  app.get('/oauth/callback', async (req, res) => {
     const { code, state, error } = req.query;
     
     if (error) {
+      console.error('❌ OAuth callback error:', error);
       res.send(`
         <html><body style="font-family: Arial, sans-serif; padding: 20px;">
           <h2>❌ OAuth Error</h2>
           <p><strong>Error:</strong> ${error}</p>
+          <p><strong>Description:</strong> ${req.query.error_description || 'Unknown error'}</p>
           <p>Please try the authentication flow again.</p>
+          <p><a href="javascript:window.close()">Close this window</a></p>
         </body></html>
       `);
       return;
     }
     
     if (code && state) {
-      res.send(`
-        <html><body style="font-family: Arial, sans-serif; padding: 20px; text-align: center;">
-          <h2>✅ OAuth Authentication Successful!</h2>
-          <p><strong>Your Jira MCP server is now configured and ready to use.</strong></p>
-          <div style="background: #f0f8f0; border: 2px solid #4caf50; border-radius: 8px; padding: 20px; margin: 20px 0;">
-            <h3>🚀 What's Next?</h3>
-            <p>Return to Claude Desktop and test your tools:</p>
-            <ul style="text-align: left; display: inline-block;">
-              <li><code>test_jira_connection</code> - Verify everything works</li>
-              <li><code>jira_get_issue</code> - Get issue details</li>
-              <li><code>help</code> - See all available commands</li>
-            </ul>
-          </div>
-          <p><strong>Authorization Code:</strong> <code>${code}</code></p>
-          <p><strong>State:</strong> <code>${state}</code></p>
-          <p><em>You can close this window and return to Claude Desktop.</em></p>
-        </body></html>
-      `);
+      try {
+        console.log('🔄 Processing OAuth callback...');
+        const tokenResponse = await callbackOAuthManager.exchangeCodeForToken(code as string, state as string);
+        
+        console.log('✅ OAuth token exchange successful');
+        
+        res.send(`
+          <html><body style="font-family: Arial, sans-serif; padding: 20px; text-align: center;">
+            <h2>✅ OAuth Authentication Successful!</h2>
+            <p><strong>Your Jira MCP server is now configured and ready to use.</strong></p>
+            <div style="background: #f0f8f0; border: 2px solid #4caf50; border-radius: 8px; padding: 20px; margin: 20px 0;">
+              <h3>🚀 What's Next?</h3>
+              <p>Return to Claude Desktop and test your tools:</p>
+              <ul style="text-align: left; display: inline-block;">
+                <li><code>test_jira_connection</code> - Verify everything works</li>
+                <li><code>jira_get_issue</code> - Get issue details</li>
+                <li><code>help</code> - See all available commands</li>
+              </ul>
+            </div>
+            <p><strong>Token Type:</strong> ${tokenResponse.token_type}</p>
+            <p><strong>Expires In:</strong> ${tokenResponse.expires_in || 'N/A'} seconds</p>
+            <p><strong>Refresh Token:</strong> ${tokenResponse.refresh_token ? 'Available' : 'Not provided'}</p>
+            <p><em>You can close this window and return to Claude Desktop.</em></p>
+          </body></html>
+        `);
+      } catch (error) {
+        console.error('❌ OAuth token exchange failed:', error);
+        res.send(`
+          <html><body style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2>❌ OAuth Token Exchange Failed</h2>
+            <p><strong>Error:</strong> ${error instanceof Error ? error.message : String(error)}</p>
+            <p>Please try the authentication flow again.</p>
+            <p><a href="javascript:window.close()">Close this window</a></p>
+          </body></html>
+        `);
+      }
     } else {
       res.send(`
         <html><body style="font-family: Arial, sans-serif; padding: 20px;">
           <h2>❌ Invalid OAuth Response</h2>
           <p>Missing authorization code or state parameter.</p>
+          <p><strong>Received:</strong></p>
+          <pre>${JSON.stringify(req.query, null, 2)}</pre>
         </body></html>
       `);
     }
