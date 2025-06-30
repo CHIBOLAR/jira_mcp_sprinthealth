@@ -62,18 +62,21 @@ class SmitheryJiraMCPServer {
   }
 
   private setupOAuthConfig() {
+    // Handle both local development and Smithery deployment
     this.oauthConfig = {
-      issuer_url: process.env.OAUTH_ISSUER_URL || 'https://auth.atlassian.com',
-      authorization_url: process.env.OAUTH_AUTHORIZATION_URL || 'https://auth.atlassian.com/authorize',
-      token_url: process.env.OAUTH_TOKEN_URL || 'https://auth.atlassian.com/oauth/token',
-      client_id: process.env.OAUTH_CLIENT_ID || '',
-      client_secret: process.env.OAUTH_CLIENT_SECRET || '',
-      redirect_uri: (process.env.THIS_HOSTNAME || 'http://localhost:3000') + '/oauth/callback'
+      issuer_url: process.env.OAUTH_ISSUER_URL || process.env.SMITHERY_OAUTH_ISSUER_URL || 'https://auth.atlassian.com',
+      authorization_url: process.env.OAUTH_AUTHORIZATION_URL || process.env.SMITHERY_OAUTH_AUTHORIZATION_URL || 'https://auth.atlassian.com/authorize',
+      token_url: process.env.OAUTH_TOKEN_URL || process.env.SMITHERY_OAUTH_TOKEN_URL || 'https://auth.atlassian.com/oauth/token',
+      client_id: process.env.OAUTH_CLIENT_ID || process.env.SMITHERY_OAUTH_CLIENT_ID || '',
+      client_secret: process.env.OAUTH_CLIENT_SECRET || process.env.SMITHERY_OAUTH_CLIENT_SECRET || '',
+      redirect_uri: (process.env.THIS_HOSTNAME || process.env.SMITHERY_HOSTNAME || process.env.HOSTNAME || 'http://localhost:3000') + '/oauth/callback'
     };
     
     console.log('🔐 OAuth Config Loaded:');
     console.log('   Client ID:', this.oauthConfig.client_id ? 'Configured' : 'Missing');
     console.log('   Redirect URI:', this.oauthConfig.redirect_uri);
+    console.log('   Environment:', process.env.NODE_ENV || 'development');
+    console.log('   Smithery Hostname:', process.env.SMITHERY_HOSTNAME || 'Not set');
   }
 
   private setupErrorHandling(): void {
@@ -304,7 +307,24 @@ class SmitheryJiraMCPServer {
         status: 'healthy',
         service: 'jira-mcp-oauth',
         version: '5.0.0',
-        oauth_configured: !!this.oauthConfig.client_id
+        oauth_configured: !!this.oauthConfig.client_id,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    // Root endpoint for basic info
+    app.get('/', (req, res) => {
+      res.json({
+        name: 'jira-mcp-oauth',
+        version: '5.0.0',
+        description: 'Jira MCP Server with Browser OAuth Authentication',
+        endpoints: {
+          health: '/health',
+          mcp: '/mcp',
+          oauth_callback: '/oauth/callback',
+          config_schema: '/config-schema',
+          tools: '/tools'
+        }
       });
     });
 
@@ -426,6 +446,19 @@ class SmitheryJiraMCPServer {
     // MCP endpoint
     app.all('/mcp', async (req, res) => {
       try {
+        // Handle Smithery configuration passed via query parameters
+        let smitheryConfig = null;
+        if (req.query.config) {
+          try {
+            // Smithery passes config as base64 encoded JSON in query parameter
+            const configBuffer = Buffer.from(req.query.config as string, 'base64');
+            smitheryConfig = JSON.parse(configBuffer.toString('utf8'));
+            console.log('📋 Smithery Config Received:', smitheryConfig);
+          } catch (configError) {
+            console.error('❌ Failed to parse Smithery config:', configError);
+          }
+        }
+
         // Handle MCP initialization with config schema
         if (req.body && req.body.method === 'initialize') {
           const initResponse = {

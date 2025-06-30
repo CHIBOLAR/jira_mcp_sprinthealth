@@ -28,11 +28,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/jira-mcp-oauth.git"
+    "url": "https://github.com/CHIBOLAR/jira_mcp_sprinthealth.git"
   },
-  "homepage": "https://github.com/your-username/jira-mcp-oauth#readme",
+  "homepage": "https://github.com/CHIBOLAR/jira_mcp_sprinthealth#readme",
   "bugs": {
-    "url": "https://github.com/your-username/jira-mcp-oauth/issues"
+    "url": "https://github.com/CHIBOLAR/jira_mcp_sprinthealth/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.2",

@@ -1,52 +1,34 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
 name: jira-mcp-oauth
 version: 5.0.0
 description: "Jira MCP Server with Browser OAuth Authentication - Install and authenticate via browser login"
 
-runtime: "docker"
-entrypoint: "dist/src/index.js"
-transport: "http"
-port: 3000
-dockerfile: "Dockerfile"
+build:
+  dockerfile: "Dockerfile"
+  dockerBuildPath: "."
 
-# Configuration schema for Smithery users
-configSchema:
-  type: "object"
-  properties:
-    companyUrl:
-      type: "string"
-      title: "Company Jira URL"
-      description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
-      placeholder: "https://your-company.atlassian.net"
-    userEmail:
-      type: "string"
-      title: "Your Email"
-      description: "Your work email address"
-      placeholder: "user@company.com"
-    authMethod:
-      type: "string"
-      enum: ["oauth"]
-      default: "oauth"
-      title: "Authentication Method"
-      description: "Browser OAuth (automatic token retrieval)"
-  required: ["companyUrl", "userEmail"]
-
-# OAuth Configuration for Atlassian
-oauth:
-  provider: "atlassian"
-  scopes: ["read:jira-user", "read:jira-work", "write:jira-work"]
-  authorization_url: "https://auth.atlassian.com/authorize"
-  token_url: "https://auth.atlassian.com/oauth/token"
-  user_info_url: "https://api.atlassian.com/me"
-
-# Environment Variables that Smithery will inject
-environment:
-  THIS_HOSTNAME: "${SMITHERY_HOSTNAME}"
-  OAUTH_ISSUER_URL: "${OAUTH_ISSUER_URL}"
-  OAUTH_AUTHORIZATION_URL: "${OAUTH_AUTHORIZATION_URL}"
-  OAUTH_TOKEN_URL: "${OAUTH_TOKEN_URL}"
-  OAUTH_CLIENT_ID: "${OAUTH_CLIENT_ID}"
-  OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET}"
-  PORT: "3000"
+startCommand:
+  type: "http"
+  configSchema:
+    type: "object"
+    required: ["companyUrl", "userEmail"]
+    properties:
+      companyUrl:
+        type: "string"
+        title: "Company Jira URL"
+        description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+        placeholder: "https://your-company.atlassian.net"
+      userEmail:
+        type: "string"
+        title: "Your Email"
+        description: "Your work email address"
+        placeholder: "user@company.com"
+      authMethod:
+        type: "string"
+        enum: ["oauth"]
+        default: "oauth"
+        title: "Authentication Method"
+        description: "Browser OAuth (automatic token retrieval)"
 
 # Installation instructions for users
 instructions: |
