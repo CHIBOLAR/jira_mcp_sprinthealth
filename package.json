@@ -15,6 +15,8 @@
     "build-individual": "tsc src/individual-oauth-server.ts --outDir dist",
     "start-fixed": "node dist/fixed-oauth-server.js",
     "start-individual": "node dist/individual-oauth-server.js",
+    "restart-oauth": "tsx restart-oauth-server.js",
+    "restart-oauth-clean": "tsx restart-oauth-server.js --clear-sessions",
     "test": "node --test",
     "smithery:dev": "npx @smithery/cli dev src/index.ts",
     "smithery:build": "npx @smithery/cli build src/index.ts",
