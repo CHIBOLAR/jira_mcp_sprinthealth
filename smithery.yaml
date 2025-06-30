@@ -1,11 +1,12 @@
-name: jira-mcp-remote-oauth
+name: jira-mcp-oauth
 version: 5.0.0
 description: "Jira MCP Server with Browser OAuth Authentication - Install and authenticate via browser login"
 
-runtime: "typescript"
-entrypoint: "src/index.ts"
+runtime: "docker"
+entrypoint: "dist/src/index.js"
 transport: "http"
 port: 3000
+dockerfile: "Dockerfile"
 
 # Configuration schema for Smithery users
 configSchema:
