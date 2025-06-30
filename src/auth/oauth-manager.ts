@@ -71,11 +71,11 @@ export class JiraOAuthManager {
     // For Atlassian Cloud, we can use a pre-registered client ID
     // that's designed for individual user access
     if (companyUrl.includes('.atlassian.net')) {
-      return process.env.JIRA_OAUTH_CLIENT_ID || 'atlassian-mcp-individual-user';
+      return process.env.JIRA_OAUTH_CLIENT_ID || 'EiNH97tfyGyZPlaMfrteiKeW2TXWVxFf';
     }
     
     // For Server/Data Center, user needs to provide their own client ID
-    return process.env.JIRA_OAUTH_CLIENT_ID || 'jira-mcp-client';
+    return process.env.JIRA_OAUTH_CLIENT_ID || 'EiNH97tfyGyZPlaMfrteiKeW2TXWVxFf';
   }
   /**
    * Get default redirect URI
@@ -196,7 +196,7 @@ export class JiraOAuthManager {
       };
 
       // Add client secret if available (for confidential clients)
-      const clientSecret = process.env.JIRA_OAUTH_CLIENT_SECRET;
+      const clientSecret = process.env.JIRA_OAUTH_CLIENT_SECRET || process.env.OAUTH_CLIENT_SECRET || 'ATOAuTXLEA7CfAwdZKovQ3VfShkxAZAERKyWdumV6Fu1szzHS27tFH3J1sjhAUDAjdv34221288B';
       if (clientSecret) {
         (tokenRequest as any).client_secret = clientSecret;
       }
@@ -257,7 +257,7 @@ export class JiraOAuthManager {
       };
 
       // Add client secret if available
-      const clientSecret = process.env.JIRA_OAUTH_CLIENT_SECRET;
+      const clientSecret = process.env.JIRA_OAUTH_CLIENT_SECRET || process.env.OAUTH_CLIENT_SECRET || 'ATOAuTXLEA7CfAwdZKovQ3VfShkxAZAERKyWdumV6Fu1szzHS27tFH3J1sjhAUDAjdv34221288B';
       if (clientSecret) {
         (refreshRequest as any).client_secret = clientSecret;
       }
