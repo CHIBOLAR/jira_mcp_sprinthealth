@@ -1,75 +1,92 @@
-# Jira MCP SprintHealth Server
+# Jira MCP Server with OAuth Authentication
 
-🔐 **OAuth Browser Authentication Now Active!**
+🚀 **Smithery-Compatible MCP Server** for seamless Jira integration with browser OAuth authentication.
 
-## 🚀 Quick Start
+## ✨ Key Features
 
-### For Smithery Deployment
-1. Use the repository URL: `https://github.com/CHIBOLAR/jira_mcp_sprinthealth`
-2. Configure with your Jira details (no API token needed!)
-3. Use OAuth browser authentication for seamless login
+- 🔐 **Browser OAuth Flow** - No manual API token management
+- 🏪 **Smithery Marketplace Ready** - One-click installation
+- ⚡ **Auto-Configuration** - Claude Desktop configured automatically
+- 🛠️ **Complete Tool Suite** - Issue management, search, projects
+- 🔒 **Secure** - OAuth tokens handled safely
+- 📱 **User-Friendly** - Config UI in Smithery
 
-### Configuration Required
-- **companyUrl**: Your Jira instance URL (e.g., `https://company.atlassian.net`)
-- **userEmail**: Your email address  
-- **authMethod**: "oauth" (default) or "token"
-- **jiraApiToken**: Only needed if using "token" auth method
+## 🎯 User Experience
 
-## 🔐 OAuth Authentication Flow
+```
+Install from Smithery → Config UI → Browser Login → Done!
+(30 seconds total setup time)
+```
 
-### **Much Better UX than API Tokens!**
+### Installation Flow:
+1. **Install** from Smithery marketplace
+2. **Configure** Jira URL and email in Smithery UI
+3. **Open Claude Desktop** (auto-configured)
+4. **Run** `start_oauth` tool
+5. **Login** via browser
+6. **Ready!** All Jira tools available
 
-**With OAuth (Active Now):**
-1. Configure Jira URL and email only
-2. Call `initiate_oauth` → get authentication URL
-3. Click URL → authorize in browser (one click!)
-4. Call `complete_oauth` with auth code → tokens stored
-5. All tools work automatically! ✨
+## 🛠️ Available Tools
 
-**Old API Token Way:**
-1. Configure Jira URL, email, AND manual API token
-2. Visit Atlassian settings manually
-3. Generate API token manually  
-4. Copy/paste token into configuration
-5. Use tools
+- `oauth_status` - Check authentication status
+- `start_oauth` - Launch browser authentication
+- `test_jira_connection` - Verify connection
+- `jira_get_issue` - Get issue details
+- `jira_search` - Search with JQL
+- `list_projects` - List accessible projects
+- `help` - Complete usage guide
 
-## 🔧 Available Tools
+## 🚀 Deployment
 
-### **OAuth Tools (No Auth Needed):**
-1. **help** - Get help information  
-2. **initiate_oauth** - Start OAuth flow → returns auth URL
-3. **complete_oauth** - Complete OAuth → exchange code for tokens
+### For Smithery Marketplace:
+1. Upload this repository to Smithery
+2. Configure OAuth app with Atlassian
+3. Set environment variables in Smithery
+4. Publish to marketplace
 
-### **Jira Tools (OAuth/Token Auth Required):**
-4. **test_jira_connection** - Test your Jira connection
-5. **jira_get_issue** - Get detailed issue information
-6. **jira_search** - Search issues with JQL
-7. **list_projects** - List accessible projects
+### OAuth App Setup:
+- **Authorization callback URL**: `${SMITHERY_HOSTNAME}/oauth/callback`
+- **Scopes**: `read:jira-user`, `read:jira-work`, `write:jira-work`
 
-## ✅ Fixed Issues
+## 💻 Development
 
-- ✅ **failedToFetchConfigSchema** - Proper schema exports
-- ✅ **OAuth browser authentication** - No manual tokens needed!
-- ✅ **TypeScript runtime compatibility** - Smithery ready
-- ✅ **Lazy loading** - Tools load without upfront auth
-- ✅ **Better UX** - Click to authenticate vs manual token generation
+```bash
+# Install dependencies
+npm install
 
-## 🌟 OAuth Benefits
+# Build TypeScript
+npm run build
 
-✅ **Browser-based** - Click to authenticate  
-✅ **No manual setup** - No API token generation needed  
-✅ **Secure scopes** - Granular permissions  
-✅ **Auto refresh** - Seamless token management  
-✅ **Modern standard** - OAuth 2.0 with PKCE  
+# Start development server
+npm run dev-oauth
 
-## 📋 Technical Details
+# Test OAuth flow
+npm run test-oauth
+```
 
-- **Runtime**: TypeScript
-- **Entry Point**: `src/server-http-oauth.ts` (OAuth-enabled)
-- **Exports**: `createServer`, `configSchema`, OAuth tools
-- **Pattern**: Lazy loading + OAuth browser authentication
-- **Fallback**: API token auth still available
+## 📋 Environment Variables
+
+Required for Smithery deployment:
+
+```
+OAUTH_CLIENT_ID=your_atlassian_oauth_client_id
+OAUTH_CLIENT_SECRET=your_atlassian_oauth_client_secret
+THIS_HOSTNAME=https://your-smithery-hostname
+PORT=3000
+```
+
+## 🔧 Technical Details
+
+- **Runtime**: Node.js 18+
+- **Transport**: HTTP (Smithery-compatible)
+- **Authentication**: Atlassian OAuth 2.0
+- **Framework**: Express.js with MCP SDK
+- **Token Storage**: In-memory (production: Redis recommended)
+
+## 📜 License
+
+MIT License - see LICENSE file for details
 
 ---
 
-🎉 **OAuth authentication active - Ready for seamless deployment in Smithery!**
+**Built for seamless Jira integration with Claude Desktop via Smithery marketplace.**

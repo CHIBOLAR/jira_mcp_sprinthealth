@@ -1,18 +1,41 @@
 name: jira-mcp-remote-oauth
 version: 5.0.0
-description: "Remote Jira MCP Server with HTTP Transport and OAuth Authentication"
+description: "Jira MCP Server with Browser OAuth Authentication - Install and authenticate via browser login"
 
 runtime: "typescript"
 entrypoint: "src/index.ts"
 transport: "http"
 port: 3000
 
-# OAuth Configuration for Smithery
+# Configuration schema for Smithery users
+configSchema:
+  type: "object"
+  properties:
+    companyUrl:
+      type: "string"
+      title: "Company Jira URL"
+      description: "Your company's Jira URL (e.g., https://company.atlassian.net)"
+      placeholder: "https://your-company.atlassian.net"
+    userEmail:
+      type: "string"
+      title: "Your Email"
+      description: "Your work email address"
+      placeholder: "user@company.com"
+    authMethod:
+      type: "string"
+      enum: ["oauth"]
+      default: "oauth"
+      title: "Authentication Method"
+      description: "Browser OAuth (automatic token retrieval)"
+  required: ["companyUrl", "userEmail"]
+
+# OAuth Configuration for Atlassian
 oauth:
-  issuer_url: "${OAUTH_ISSUER_URL}"
-  authorization_url: "${OAUTH_AUTHORIZATION_URL}"
-  token_url: "${OAUTH_TOKEN_URL}"
-  registration_url: "${OAUTH_REGISTRATION_URL}"
+  provider: "atlassian"
+  scopes: ["read:jira-user", "read:jira-work", "write:jira-work"]
+  authorization_url: "https://auth.atlassian.com/authorize"
+  token_url: "https://auth.atlassian.com/oauth/token"
+  user_info_url: "https://api.atlassian.com/me"
 
 # Environment Variables that Smithery will inject
 environment:
@@ -20,6 +43,28 @@ environment:
   OAUTH_ISSUER_URL: "${OAUTH_ISSUER_URL}"
   OAUTH_AUTHORIZATION_URL: "${OAUTH_AUTHORIZATION_URL}"
   OAUTH_TOKEN_URL: "${OAUTH_TOKEN_URL}"
-  OAUTH_REGISTRATION_URL: "${OAUTH_REGISTRATION_URL}"
   OAUTH_CLIENT_ID: "${OAUTH_CLIENT_ID}"
   OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET}"
+  PORT: "3000"
+
+# Installation instructions for users
+instructions: |
+  ## 🚀 Installation Steps:
+  
+  1. **Configure** your Jira URL and email in the form above
+  2. **Install** this MCP server from Smithery
+  3. **Open Claude Desktop** - the server will be auto-configured
+  4. **Run the tool** `start_oauth` to begin browser authentication
+  5. **Login** with your Atlassian account in the browser
+  6. **Done!** Your Jira is now connected to Claude
+  
+  ## 🛠️ Available Tools:
+  - `oauth_status` - Check authentication status
+  - `start_oauth` - Start browser login process
+  - `test_jira_connection` - Test your connection
+  - `jira_get_issue` - Get issue details
+  - `jira_search` - Search issues with JQL
+  - `list_projects` - List your projects
+  - `help` - Get usage help
+  
+  ## ⚡ No API tokens needed - just browser login!

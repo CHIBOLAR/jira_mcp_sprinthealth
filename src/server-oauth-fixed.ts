@@ -462,6 +462,83 @@ class JiraMCPServerFixed {
       });
     });
 
+    // Smithery-compatible endpoints
+    app.get('/config-schema', (req, res) => {
+      res.json(configSchema);
+    });
+
+    app.get('/config', (req, res) => {
+      const configParam = req.query.config as string;
+      if (configParam) {
+        try {
+          const decoded = Buffer.from(configParam, 'base64').toString('utf-8');
+          const parsed = JSON.parse(decoded);
+          const validated = configSchema.parse(parsed);
+          res.json(validated);
+        } catch (error) {
+          res.status(400).json({ error: 'Invalid configuration' });
+        }
+      } else {
+        res.json({
+          companyUrl: process.env.JIRA_URL || 'https://your-company.atlassian.net',
+          userEmail: process.env.JIRA_EMAIL || 'user@company.com',
+          authMethod: 'oauth'
+        });
+      }
+    });
+
+    app.get('/tools', (req, res) => {
+      res.json([
+        {
+          name: 'help',
+          description: 'Get help and information about available tools',
+          inputSchema: {}
+        },
+        {
+          name: 'test_jira_connection',
+          description: 'Test connection to Jira instance and verify credentials',
+          inputSchema: {}
+        },
+        {
+          name: 'jira_get_issue',
+          description: 'Get detailed issue information',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              issueKey: {
+                type: 'string',
+                description: 'Jira issue key (e.g., "PROJ-123")'
+              }
+            },
+            required: ['issueKey']
+          }
+        },
+        {
+          name: 'jira_search',
+          description: 'Search issues with JQL',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              jql: {
+                type: 'string',
+                description: 'JQL query string'
+              }
+            },
+            required: ['jql']
+          }
+        },
+        {
+          name: 'list_projects',
+          description: 'List accessible projects',
+          inputSchema: {}
+        }
+      ]);
+    });
+
+    app.get('/schema', (req, res) => {
+      res.json(configSchema);
+    });
+
     // MCP endpoint with OAuth authentication
     app.use('/mcp', bearerAuthMiddleware);  // ✅ Apply OAuth middleware
     
