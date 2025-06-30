@@ -8,6 +8,10 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import express from 'express';
 import cors from 'cors';
 import { z } from 'zod';
+import { config } from 'dotenv';
+
+// Load environment variables
+config();
 
 // Configuration schema for Smithery
 export const configSchema = z.object({
