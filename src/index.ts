@@ -2,6 +2,8 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import express from 'express';
+import cors from 'cors';
 
 // Configuration schema for Smithery CLI
 export const configSchema = z.object({
@@ -249,9 +251,11 @@ function buildOAuthUrl(companyUrl: string): string | null {
   const clientId = process.env.OAUTH_CLIENT_ID || getAppCredentials();
   
   // Smithery may provide OAUTH_REDIRECT_URI or SMITHERY_HOSTNAME for callback
+  const port = process.env.PORT || '3000';
+  const hostname = process.env.THIS_HOSTNAME || `http://localhost:${port}`;
   const redirectUri = process.env.OAUTH_REDIRECT_URI ||
     (process.env.SMITHERY_HOSTNAME ? `https://${process.env.SMITHERY_HOSTNAME}/oauth/callback` : null) ||
-    'http://localhost:3000/oauth/callback'; // Fallback for development
+    `${hostname}/oauth/callback`; // Use configured hostname and port
 
   if (!clientId || !redirectUri) {
     return null;
@@ -267,4 +271,74 @@ function buildOAuthUrl(companyUrl: string): string | null {
   });
 
   return `https://auth.atlassian.com/authorize?${params.toString()}`;
+}
+
+// Start minimal HTTP server for OAuth callbacks when running directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const PORT = parseInt(process.env.PORT || '3000');
+  const app = express();
+  
+  app.use(cors());
+  app.use(express.json());
+  
+  // OAuth callback endpoint
+  app.get('/oauth/callback', (req, res) => {
+    const { code, state, error } = req.query;
+    
+    if (error) {
+      res.send(`
+        <html><body style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2>❌ OAuth Error</h2>
+          <p><strong>Error:</strong> ${error}</p>
+          <p>Please try the authentication flow again.</p>
+        </body></html>
+      `);
+      return;
+    }
+    
+    if (code && state) {
+      res.send(`
+        <html><body style="font-family: Arial, sans-serif; padding: 20px; text-align: center;">
+          <h2>✅ OAuth Authentication Successful!</h2>
+          <p><strong>Your Jira MCP server is now configured and ready to use.</strong></p>
+          <div style="background: #f0f8f0; border: 2px solid #4caf50; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <h3>🚀 What's Next?</h3>
+            <p>Return to Claude Desktop and test your tools:</p>
+            <ul style="text-align: left; display: inline-block;">
+              <li><code>test_jira_connection</code> - Verify everything works</li>
+              <li><code>jira_get_issue</code> - Get issue details</li>
+              <li><code>help</code> - See all available commands</li>
+            </ul>
+          </div>
+          <p><strong>Authorization Code:</strong> <code>${code}</code></p>
+          <p><strong>State:</strong> <code>${state}</code></p>
+          <p><em>You can close this window and return to Claude Desktop.</em></p>
+        </body></html>
+      `);
+    } else {
+      res.send(`
+        <html><body style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2>❌ Invalid OAuth Response</h2>
+          <p>Missing authorization code or state parameter.</p>
+        </body></html>
+      `);
+    }
+  });
+  
+  // Health check
+  app.get('/health', (req, res) => {
+    res.json({
+      status: 'healthy',
+      service: 'jira-mcp-oauth',
+      version: '5.4.0',
+      port: PORT,
+      timestamp: new Date().toISOString()
+    });
+  });
+  
+  app.listen(PORT, () => {
+    console.log(`🚀 Jira MCP OAuth server running on http://localhost:${PORT}`);
+    console.log(`🔐 OAuth callback: http://localhost:${PORT}/oauth/callback`);
+    console.log(`📊 Health check: http://localhost:${PORT}/health`);
+  });
 }
