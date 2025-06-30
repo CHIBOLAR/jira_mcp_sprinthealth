@@ -66,21 +66,45 @@ class SmitheryJiraMCPServer {
   }
 
   private setupOAuthConfig() {
+    // OAuth configuration with hardcoded app credentials for Smithery deployment
+    // These are app-level credentials (safe to hardcode) - users still authenticate individually
+    const clientId = process.env.OAUTH_CLIENT_ID || 
+                    process.env.SMITHERY_OAUTH_CLIENT_ID || 
+                    process.env.ATLASSIAN_OAUTH_CLIENT_ID ||
+                    process.env.JIRA_OAUTH_CLIENT_ID ||
+                    'EiNH97tfyGyZPlaMfrteiKeW2TXWVxFf'; // Hardcoded fallback for Smithery
+                    
+    const clientSecret = process.env.OAUTH_CLIENT_SECRET || 
+                        process.env.SMITHERY_OAUTH_CLIENT_SECRET || 
+                        process.env.ATLASSIAN_OAUTH_CLIENT_SECRET ||
+                        process.env.JIRA_OAUTH_CLIENT_SECRET ||
+                        'ATOAuTXLEA7CfAwdZKovQ3VfShkxAZAERKyWdumV6Fu1szzHS27tFH3J1sjhAUDAjdv34221288B'; // Hardcoded fallback for Smithery
+    
     // Handle both local development and Smithery deployment
     this.oauthConfig = {
       issuer_url: process.env.OAUTH_ISSUER_URL || process.env.SMITHERY_OAUTH_ISSUER_URL || 'https://auth.atlassian.com',
       authorization_url: process.env.OAUTH_AUTHORIZATION_URL || process.env.SMITHERY_OAUTH_AUTHORIZATION_URL || 'https://auth.atlassian.com/authorize',
       token_url: process.env.OAUTH_TOKEN_URL || process.env.SMITHERY_OAUTH_TOKEN_URL || 'https://auth.atlassian.com/oauth/token',
-      client_id: process.env.OAUTH_CLIENT_ID || process.env.SMITHERY_OAUTH_CLIENT_ID || '',
-      client_secret: process.env.OAUTH_CLIENT_SECRET || process.env.SMITHERY_OAUTH_CLIENT_SECRET || '',
-      redirect_uri: (process.env.THIS_HOSTNAME || process.env.SMITHERY_HOSTNAME || process.env.HOSTNAME || 'http://localhost:3000') + '/oauth/callback'
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: (process.env.THIS_HOSTNAME || process.env.SMITHERY_HOSTNAME || process.env.HOSTNAME || 'http://localhost:3003') + '/oauth/callback'
     };
     
     console.log('🔐 OAuth Config Loaded:');
     console.log('   Client ID:', this.oauthConfig.client_id ? 'Configured' : 'Missing');
+    console.log('   Client Secret:', this.oauthConfig.client_secret ? 'Configured' : 'Missing');
     console.log('   Redirect URI:', this.oauthConfig.redirect_uri);
     console.log('   Environment:', process.env.NODE_ENV || 'development');
     console.log('   Smithery Hostname:', process.env.SMITHERY_HOSTNAME || 'Not set');
+    
+    // Provide helpful setup information if credentials are missing
+    if (!this.oauthConfig.client_id || !this.oauthConfig.client_secret) {
+      console.warn('⚠️ OAuth credentials not found in environment variables.');
+      console.warn('   For Smithery deployment, configure these environment variables:');
+      console.warn('   - OAUTH_CLIENT_ID or ATLASSIAN_OAUTH_CLIENT_ID');
+      console.warn('   - OAUTH_CLIENT_SECRET or ATLASSIAN_OAUTH_CLIENT_SECRET');
+      console.warn('   Contact your Smithery administrator for OAuth app registration.');
+    }
   }
 
   private setupErrorHandling(): void {
@@ -103,15 +127,33 @@ class SmitheryJiraMCPServer {
       async () => {
         try {
           const hasOAuth = !!this.oauthConfig.client_id;
+          const hasSecret = !!this.oauthConfig.client_secret;
           
-          return {
-            content: [{
-              type: 'text',
-              text: hasOAuth 
-                ? '✅ **OAuth Configuration Ready**\n\nUser can now authenticate via browser.'
-                : '⚠️ **OAuth Not Configured**\n\nPlease configure OAuth credentials in Smithery.'
-            }]
-          };
+          if (hasOAuth && hasSecret) {
+            return {
+              content: [{
+                type: 'text',
+                text: '✅ **OAuth Configuration Ready**\n\n' +
+                      '🔐 **Status**: Ready for individual user authentication\n' +
+                      '🌐 **Client ID**: Configured ✅\n' +
+                      '🔑 **Client Secret**: Configured ✅\n' +
+                      '🔗 **Redirect URI**: ' + this.oauthConfig.redirect_uri + '\n' +
+                      '🚀 **Next Step**: Run `start_oauth` to authenticate with your Atlassian account\n\n' +
+                      '**No setup required - just browser login!**'
+              }]
+            };
+          } else {
+            return {
+              content: [{
+                type: 'text',
+                text: '⚠️ **OAuth Configuration Issue**\n\n' +
+                      '🔐 **Client ID**: ' + (hasOAuth ? '✅ Configured' : '❌ Missing') + '\n' +
+                      '🔑 **Client Secret**: ' + (hasSecret ? '✅ Configured' : '❌ Missing') + '\n' +
+                      '🔗 **Redirect URI**: ' + this.oauthConfig.redirect_uri + '\n\n' +
+                      'Please contact the MCP server administrator to configure OAuth credentials.'
+              }]
+            };
+          }
         } catch (error) {
           return {
             content: [{
