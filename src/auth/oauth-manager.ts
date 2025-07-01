@@ -1,4 +1,6 @@
 import { randomBytes, createHash } from 'crypto';
+import { tmpdir } from 'os';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 
 /**
  * Enhanced OAuth 2.1 Manager for Individual User Authentication
@@ -40,8 +42,8 @@ export class JiraOAuthManager {
   private config: OAuthConfig;
   private readonly SESSION_TTL = 15 * 60 * 1000; // 15 minutes for OAuth flow
   
-  // ✅ SINGLETON FIX: Shared static Map across all instances
-  private static sessions = new Map<string, OAuthSession>();
+  // ✅ PERSISTENT FIX: File-based session storage across all instances
+  private static readonly SESSION_FILE = `${tmpdir()}/jira-oauth-sessions.json`;
 
   constructor(companyUrl: string, customConfig?: Partial<AtlassianOAuthConfig>) {
     // Determine if this is Atlassian Cloud or Server/Data Center
@@ -60,10 +62,11 @@ export class JiraOAuthManager {
       scopes: customConfig?.scopes || this.getDefaultScopes(isCloud)
     };
 
-    console.log('🔧 OAuth Manager initialized (SHARED SINGLETON MODE)');
+    console.log('🔧 OAuth Manager initialized (PERSISTENT FILE MODE)');
     console.log('🔗 Authorization URL:', this.config.authorizationUrl);
     console.log('🎯 Redirect URI:', this.config.redirectUri);
-    console.log(`📊 Shared sessions active: ${JiraOAuthManager.sessions.size}`);
+    console.log(`📁 Session file: ${JiraOAuthManager.SESSION_FILE}`);
+    console.log(`📊 Persistent sessions active: ${this.getStoredSessions().size}`);
     
     // Cleanup expired sessions every 5 minutes
     setInterval(() => this.cleanupExpiredSessions(), 5 * 60 * 1000);
@@ -126,47 +129,93 @@ export class JiraOAuthManager {
   }
 
   /**
-   * ✅ SINGLETON FIX: Shared session storage across all instances
+   * ✅ PERSISTENT FIX: File-based session storage management
+   */
+  private getStoredSessions(): Map<string, OAuthSession> {
+    try {
+      if (!existsSync(JiraOAuthManager.SESSION_FILE)) {
+        return new Map();
+      }
+      
+      const fileContent = readFileSync(JiraOAuthManager.SESSION_FILE, 'utf8');
+      const sessions = JSON.parse(fileContent);
+      return new Map(Object.entries(sessions));
+    } catch (error) {
+      console.warn('⚠️ Failed to read session file, starting fresh:', (error as Error).message);
+      return new Map();
+    }
+  }
+
+  private saveStoredSessions(sessions: Map<string, OAuthSession>): void {
+    try {
+      const sessionObj = Object.fromEntries(sessions.entries());
+      writeFileSync(JiraOAuthManager.SESSION_FILE, JSON.stringify(sessionObj, null, 2), 'utf8');
+    } catch (error) {
+      console.error('❌ Failed to save sessions to file:', (error as Error).message);
+    }
+  }
+
+  /**
+   * ✅ PERSISTENT FIX: File-based session storage across all instances
    */
   private storeSession(state: string, session: OAuthSession): void {
-    console.log(`💾 Storing session in shared memory: ${state}`);
-    JiraOAuthManager.sessions.set(state, session);
+    console.log(`💾 Storing session in persistent file: ${state}`);
+    const sessions = this.getStoredSessions();
+    sessions.set(state, session);
+    this.saveStoredSessions(sessions);
     
     // Auto-cleanup after TTL
     setTimeout(() => {
-      if (JiraOAuthManager.sessions.has(state)) {
+      const currentSessions = this.getStoredSessions();
+      if (currentSessions.has(state)) {
         console.log(`🧹 Auto-cleaning expired session: ${state}`);
-        JiraOAuthManager.sessions.delete(state);
+        currentSessions.delete(state);
+        this.saveStoredSessions(currentSessions);
       }
     }, this.SESSION_TTL);
   }
 
   /**
-   * ✅ SINGLETON FIX: Shared session lookup across all instances
+   * ✅ PERSISTENT FIX: File-based session lookup across all instances
    */
   private getSession(state: string): OAuthSession | undefined {
-    const session = JiraOAuthManager.sessions.get(state);
+    const sessions = this.getStoredSessions();
+    const session = sessions.get(state);
     console.log(`🔍 Looking up session ${state}: ${session ? 'FOUND' : 'NOT FOUND'}`);
-    console.log(`📊 Total active sessions: ${JiraOAuthManager.sessions.size}`);
+    console.log(`📊 Total active sessions in file: ${sessions.size}`);
+    console.log(`📁 Session file location: ${JiraOAuthManager.SESSION_FILE}`);
+    
+    if (session) {
+      console.log(`⏰ Session timestamp: ${new Date(session.timestamp).toISOString()}`);
+      console.log(`⌛ Session age: ${Math.round((Date.now() - session.timestamp) / 1000)}s`);
+    }
+    
     return session;
   }
 
   /**
-   * ✅ SINGLETON FIX: Shared session deletion across all instances
+   * ✅ PERSISTENT FIX: File-based session deletion across all instances
    */
   private deleteSession(state: string): void {
-    const deleted = JiraOAuthManager.sessions.delete(state);
+    const sessions = this.getStoredSessions();
+    const deleted = sessions.delete(state);
+    this.saveStoredSessions(sessions);
     console.log(`🗑️ Deleted session ${state}: ${deleted ? 'SUCCESS' : 'NOT FOUND'}`);
   }
 
   /**
-   * Clear all OAuth sessions (for debugging) - SINGLETON FIX
+   * Clear all OAuth sessions (for debugging) - PERSISTENT FIX
    */
   clearAllSessions(): void {
     try {
-      const sessionCount = JiraOAuthManager.sessions.size;
-      JiraOAuthManager.sessions.clear();
-      console.log(`✅ All ${sessionCount} OAuth sessions cleared from shared memory`);
+      const sessions = this.getStoredSessions();
+      const sessionCount = sessions.size;
+      
+      // Clear the file by writing empty object
+      this.saveStoredSessions(new Map());
+      
+      console.log(`✅ All ${sessionCount} OAuth sessions cleared from persistent file`);
+      console.log(`📁 Session file: ${JiraOAuthManager.SESSION_FILE}`);
     } catch (error) {
       console.error('❌ Failed to clear sessions:', (error as Error).message);
     }
@@ -233,7 +282,7 @@ export class JiraOAuthManager {
     
     console.log('🔐 Generated OAuth URL for user:', userEmail || 'unknown');
     console.log('🎲 State parameter:', state);
-    console.log('📊 Active sessions:', JiraOAuthManager.sessions.size);
+    console.log('📊 Active sessions:', this.getStoredSessions().size);
     
     return { authUrl, state };
   }
@@ -243,7 +292,7 @@ export class JiraOAuthManager {
   async exchangeCodeForToken(code: string, state: string): Promise<TokenResponse> {
     console.log('🔄 Starting token exchange...');
     console.log('🔍 Looking for session with state:', state);
-    console.log('📊 Available sessions:', Array.from(JiraOAuthManager.sessions.keys()));
+    console.log('📊 Available sessions:', Array.from(this.getStoredSessions().keys()));
     
     const session = this.getSession(state);
     if (!session) {
@@ -443,26 +492,28 @@ export class JiraOAuthManager {
     return createHash('sha256').update(verifier).digest('base64url');
   }
   /**
-   * Clean up expired sessions periodically - SINGLETON FIX
+   * Clean up expired sessions periodically - PERSISTENT FIX
    */
   cleanupExpiredSessions(): void {
     const now = Date.now();
+    const sessions = this.getStoredSessions();
     let cleaned = 0;
     
-    for (const [state, session] of JiraOAuthManager.sessions.entries()) {
+    for (const [state, session] of sessions.entries()) {
       if (now - session.timestamp > this.SESSION_TTL) {
-        JiraOAuthManager.sessions.delete(state);
+        sessions.delete(state);
         cleaned++;
       }
     }
     
     if (cleaned > 0) {
-      console.log('🧹 Cleaned up', cleaned, 'expired OAuth sessions');
+      this.saveStoredSessions(sessions);
+      console.log('🧹 Cleaned up', cleaned, 'expired OAuth sessions from persistent file');
     }
   }
 
   /**
-   * Get session and OAuth statistics - SINGLETON FIX
+   * Get session and OAuth statistics - PERSISTENT FIX
    */
   getStats(): { 
     activeSessions: number; 
@@ -470,9 +521,10 @@ export class JiraOAuthManager {
     features: string[];
   } {
     this.cleanupExpiredSessions();
+    const sessions = this.getStoredSessions();
     
     return {
-      activeSessions: JiraOAuthManager.sessions.size,
+      activeSessions: sessions.size,
       config: {
         authorizationUrl: this.config.authorizationUrl,
         tokenUrl: this.config.tokenUrl,
@@ -481,7 +533,8 @@ export class JiraOAuthManager {
       },
       features: [
         'OAuth 2.1 with PKCE',
-        'Shared in-memory session storage (SINGLETON)',
+        'Persistent file-based session storage',
+        'Cross-process session sharing',
         'Browser-based flow',
         'Automatic session cleanup'
       ]
