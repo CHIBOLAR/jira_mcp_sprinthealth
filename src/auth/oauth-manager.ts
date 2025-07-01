@@ -1,7 +1,4 @@
 import { randomBytes, createHash } from 'crypto';
-import { writeFileSync, readFileSync, existsSync, unlinkSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
 
 /**
  * Enhanced OAuth 2.1 Manager for Individual User Authentication
@@ -42,7 +39,9 @@ export interface AtlassianOAuthConfig {
 export class JiraOAuthManager {
   private config: OAuthConfig;
   private readonly SESSION_TTL = 15 * 60 * 1000; // 15 minutes for OAuth flow
-  private readonly SESSION_FILE = join(tmpdir(), 'jira-oauth-sessions.json');
+  
+  // ✅ FIXED: Use Map instead of files
+  private sessions = new Map<string, OAuthSession>();
 
   constructor(companyUrl: string, customConfig?: Partial<AtlassianOAuthConfig>) {
     // Determine if this is Atlassian Cloud or Server/Data Center
@@ -61,9 +60,12 @@ export class JiraOAuthManager {
       scopes: customConfig?.scopes || this.getDefaultScopes(isCloud)
     };
 
-    console.log('🔧 OAuth Manager initialized for:', isCloud ? 'Atlassian Cloud' : 'Server/Data Center');
+    console.log('🔧 OAuth Manager initialized (IN-MEMORY MODE)');
     console.log('🔗 Authorization URL:', this.config.authorizationUrl);
     console.log('🎯 Redirect URI:', this.config.redirectUri);
+    
+    // Cleanup expired sessions every 5 minutes
+    setInterval(() => this.cleanupExpiredSessions(), 5 * 60 * 1000);
   }
 
   /**
@@ -123,58 +125,37 @@ export class JiraOAuthManager {
   }
 
   /**
-   * Read sessions from persistent storage
-   */
-  private readSessions(): Map<string, OAuthSession> {
-    try {
-      if (!existsSync(this.SESSION_FILE)) {
-        return new Map();
-      }
-      const data = readFileSync(this.SESSION_FILE, 'utf8');
-      const sessionArray = JSON.parse(data);
-      return new Map(sessionArray);
-    } catch (error) {
-      console.warn('⚠️ Failed to read OAuth sessions:', (error as Error).message);
-      return new Map();
-    }
-  }
-
-  /**
-   * Write sessions to persistent storage
-   */
-  private writeSessions(sessions: Map<string, OAuthSession>): void {
-    try {
-      const sessionArray = Array.from(sessions.entries());
-      writeFileSync(this.SESSION_FILE, JSON.stringify(sessionArray, null, 2));
-    } catch (error) {
-      console.error('❌ Failed to write OAuth sessions:', (error as Error).message);
-    }
-  }
-
-  /**
-   * Get a session by state
-   */
-  private getSession(state: string): OAuthSession | undefined {
-    const sessions = this.readSessions();
-    return sessions.get(state);
-  }
-
-  /**
-   * Store a session
+   * ✅ FIXED: In-memory session storage
    */
   private storeSession(state: string, session: OAuthSession): void {
-    const sessions = this.readSessions();
-    sessions.set(state, session);
-    this.writeSessions(sessions);
+    console.log(`💾 Storing session in memory: ${state}`);
+    this.sessions.set(state, session);
+    
+    // Auto-cleanup after TTL
+    setTimeout(() => {
+      if (this.sessions.has(state)) {
+        console.log(`🧹 Auto-cleaning expired session: ${state}`);
+        this.sessions.delete(state);
+      }
+    }, this.SESSION_TTL);
   }
 
   /**
-   * Delete a session
+   * ✅ FIXED: In-memory session lookup
+   */
+  private getSession(state: string): OAuthSession | undefined {
+    const session = this.sessions.get(state);
+    console.log(`🔍 Looking up session ${state}: ${session ? 'FOUND' : 'NOT FOUND'}`);
+    console.log(`📊 Total active sessions: ${this.sessions.size}`);
+    return session;
+  }
+
+  /**
+   * ✅ FIXED: In-memory session deletion
    */
   private deleteSession(state: string): void {
-    const sessions = this.readSessions();
-    sessions.delete(state);
-    this.writeSessions(sessions);
+    const deleted = this.sessions.delete(state);
+    console.log(`🗑️ Deleted session ${state}: ${deleted ? 'SUCCESS' : 'NOT FOUND'}`);
   }
 
   /**
@@ -182,10 +163,9 @@ export class JiraOAuthManager {
    */
   clearAllSessions(): void {
     try {
-      if (existsSync(this.SESSION_FILE)) {
-        unlinkSync(this.SESSION_FILE);
-        console.log('✅ All OAuth sessions cleared');
-      }
+      const sessionCount = this.sessions.size;
+      this.sessions.clear();
+      console.log(`✅ All ${sessionCount} OAuth sessions cleared from memory`);
     } catch (error) {
       console.error('❌ Failed to clear sessions:', (error as Error).message);
     }
@@ -252,7 +232,7 @@ export class JiraOAuthManager {
     
     console.log('🔐 Generated OAuth URL for user:', userEmail || 'unknown');
     console.log('🎲 State parameter:', state);
-    console.log('📁 Session stored in:', this.SESSION_FILE);
+    console.log('📊 Active sessions:', this.sessions.size);
     
     return { authUrl, state };
   }
@@ -260,18 +240,17 @@ export class JiraOAuthManager {
    * Exchange authorization code for access token
    */
   async exchangeCodeForToken(code: string, state: string): Promise<TokenResponse> {
-    console.log('🔍 Looking for OAuth session with state:', state);
-    console.log('📁 Session file location:', this.SESSION_FILE);
+    console.log('🔄 Starting token exchange...');
+    console.log('🔍 Looking for session with state:', state);
+    console.log('📊 Available sessions:', Array.from(this.sessions.keys()));
     
     const session = this.getSession(state);
     if (!session) {
       console.error('❌ OAuth session not found for state:', state);
-      const allSessions = this.readSessions();
-      console.log('📊 Available sessions:', Array.from(allSessions.keys()));
       throw new Error('Invalid or expired OAuth state parameter. Please restart the authentication flow.');
     }
 
-    console.log('✅ OAuth session found for state:', state);
+    console.log('✅ OAuth session found');
     
     // Check session expiry
     if (Date.now() - session.timestamp > this.SESSION_TTL) {
@@ -302,7 +281,7 @@ export class JiraOAuthManager {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json',
-          'User-Agent': 'Jira-MCP-Server/4.0.0'
+          'User-Agent': 'Jira-MCP-Server/6.0.0-FIXED'
         },
         body: new URLSearchParams(tokenRequest)
       });
@@ -362,7 +341,7 @@ export class JiraOAuthManager {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json',
-          'User-Agent': 'Jira-MCP-Server/4.0.0'
+          'User-Agent': 'Jira-MCP-Server/6.0.0-FIXED'
         },
         body: new URLSearchParams(refreshRequest)
       });
@@ -402,7 +381,7 @@ export class JiraOAuthManager {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/json',
-          'User-Agent': 'Jira-MCP-Server/4.0.0'
+          'User-Agent': 'Jira-MCP-Server/6.0.0-FIXED'
         }
       });
 
@@ -424,7 +403,7 @@ export class JiraOAuthManager {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/json',
-          'User-Agent': 'Jira-MCP-Server/4.0.0'
+          'User-Agent': 'Jira-MCP-Server/6.0.0-FIXED'
         }
       });
 
@@ -468,17 +447,15 @@ export class JiraOAuthManager {
   cleanupExpiredSessions(): void {
     const now = Date.now();
     let cleaned = 0;
-    const sessions = this.readSessions();
     
-    for (const [state, session] of sessions.entries()) {
+    for (const [state, session] of this.sessions.entries()) {
       if (now - session.timestamp > this.SESSION_TTL) {
-        sessions.delete(state);
+        this.sessions.delete(state);
         cleaned++;
       }
     }
     
     if (cleaned > 0) {
-      this.writeSessions(sessions);
       console.log('🧹 Cleaned up', cleaned, 'expired OAuth sessions');
     }
   }
@@ -492,10 +469,9 @@ export class JiraOAuthManager {
     features: string[];
   } {
     this.cleanupExpiredSessions();
-    const sessions = this.readSessions();
     
     return {
-      activeSessions: sessions.size,
+      activeSessions: this.sessions.size,
       config: {
         authorizationUrl: this.config.authorizationUrl,
         tokenUrl: this.config.tokenUrl,
@@ -504,10 +480,9 @@ export class JiraOAuthManager {
       },
       features: [
         'OAuth 2.1 with PKCE',
-        'Individual user authentication',
+        'In-memory session storage (DEVELOPMENT MODE)',
         'Browser-based flow',
-        'Automatic token refresh',
-        'Session management'
+        'Automatic session cleanup'
       ]
     };
   }
