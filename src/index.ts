@@ -30,12 +30,35 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
 
   console.log('🔧 Jira MCP Server Config:', config);
   console.log('🌐 Smithery HTTP mode - OAuth callbacks will be handled by main server');
+  
+  // Set environment variable to enable HTTP server for OAuth callbacks
+  process.env.START_HTTP_SERVER = 'true';
+  console.log('✅ Enabled HTTP server for OAuth callbacks in Smithery mode');
 
   // Initialize OAuth Manager with proper configuration using singleton pattern
+  // Determine the correct redirect URI for Smithery deployments
+  const getRedirectUri = () => {
+    if (process.env.OAUTH_REDIRECT_URI) {
+      return process.env.OAUTH_REDIRECT_URI;
+    }
+    
+    // In Smithery, use the Smithery hostname if available
+    if (process.env.SMITHERY_HOSTNAME) {
+      return `https://${process.env.SMITHERY_HOSTNAME}/oauth/callback`;
+    }
+    
+    // Fallback to SERVER_URL or localhost
+    const baseUrl = process.env.SERVER_URL || 'http://localhost:3000';
+    return `${baseUrl}/oauth/callback`;
+  };
+  
+  const redirectUri = getRedirectUri();
+  console.log(`🔗 OAuth redirect URI: ${redirectUri}`);
+  
   const oauthConfig = {
     clientId: process.env.OAUTH_CLIENT_ID || process.env.JIRA_OAUTH_CLIENT_ID,
     clientSecret: process.env.OAUTH_CLIENT_SECRET || process.env.JIRA_OAUTH_CLIENT_SECRET,
-    redirectUri: process.env.OAUTH_REDIRECT_URI || `${process.env.SERVER_URL || 'http://localhost:3000'}/oauth/callback`,
+    redirectUri,
   };
   
   console.log('🔧 Using singleton OAuth manager for MCP server');
@@ -72,6 +95,83 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
                 'User can now authenticate via browser.'
         }]
       };
+    }
+  );
+
+  // OAuth Callback Handler Tool - for Smithery HTTP mode
+  server.tool(
+    'oauth_callback',
+    'Handle OAuth callback (internal use)',
+    {
+      code: z.string().optional().describe('OAuth authorization code'),
+      state: z.string().optional().describe('OAuth state parameter'),
+      error: z.string().optional().describe('OAuth error if any')
+    },
+    async ({ code, state, error }) => {
+      console.log('🔄 OAuth callback received via MCP tool');
+      console.log(`📝 Code: ${code ? 'Present' : 'Missing'}`);
+      console.log(`🏷️ State: ${state || 'Missing'}`);
+      console.log(`❌ Error: ${error || 'None'}`);
+      
+      if (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ **OAuth Error**: ${error}\n\nPlease restart the authentication flow.`
+          }]
+        };
+      }
+      
+      if (!code || !state) {
+        return {
+          content: [{
+            type: 'text',
+            text: '❌ **Missing OAuth Parameters**\n\nBoth authorization code and state are required for OAuth callback.'
+          }]
+        };
+      }
+      
+      try {
+        const tokenResponse = await oauthManager.exchangeCodeForToken(code, state);
+        
+        // Save tokens for API requests
+        const fs = await import('fs');
+        const os = await import('os');
+        const path = await import('path');
+        
+        const tokenFile = path.join(os.tmpdir(), 'jira-mcp-tokens.json');
+        const tokenData = {
+          access_token: tokenResponse.access_token,
+          refresh_token: tokenResponse.refresh_token,
+          expires_in: tokenResponse.expires_in,
+          token_type: tokenResponse.token_type,
+          timestamp: Date.now()
+        };
+        
+        fs.writeFileSync(tokenFile, JSON.stringify(tokenData, null, 2));
+        
+        return {
+          content: [{
+            type: 'text',
+            text: '✅ **OAuth Authentication Successful!**\n\n' +
+                  'Your Jira MCP server is now authenticated and ready to use.\n\n' +
+                  '🔧 **Next Steps:**\n' +
+                  '• Run `test_jira_connection` to verify the connection\n' +
+                  '• Use `jira_get_issue`, `jira_search`, or other tools\n' +
+                  '• Run `help` to see all available commands'
+          }]
+        };
+      } catch (error) {
+        console.error('❌ OAuth token exchange failed:', error);
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ **OAuth Token Exchange Failed**\n\n` +
+                  `Error: ${error instanceof Error ? error.message : String(error)}\n\n` +
+                  'Please restart the authentication flow.'
+          }]
+        };
+      }
     }
   );
 
@@ -345,6 +445,8 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
                 '🛠️ **Available Tools:**\n' +
                 '• oauth_status - Check OAuth setup\n' +
                 '• start_oauth - Start browser authentication\n' +
+                '• oauth_callback - Handle OAuth callback (auto-called)\n' +
+                '• debug_oauth_sessions - Debug session storage\n' +
                 '• test_jira_connection - Test connection\n' +
                 '• jira_get_issue - Get issue details\n' +
                 '• jira_search - Search with JQL\n' +
@@ -388,7 +490,8 @@ if (process.env.START_HTTP_SERVER === 'true' || process.argv.includes('--http-se
   app.use(cors());
   app.use(express.json());
   
-  // Initialize OAuth manager for callback handling
+  // Use the same OAuth manager instance and configuration as the MCP server
+  console.log('🔧 HTTP server will use same OAuth configuration as MCP server');
   const callbackOAuthManager = JiraOAuthManager.getInstance(process.env.JIRA_URL || 'https://codegenie.atlassian.net', {
     clientId: process.env.OAUTH_CLIENT_ID || process.env.JIRA_OAUTH_CLIENT_ID,
     clientSecret: process.env.OAUTH_CLIENT_SECRET || process.env.JIRA_OAUTH_CLIENT_SECRET,
