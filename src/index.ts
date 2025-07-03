@@ -71,6 +71,89 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     }
   );
 
+  // Debug Session Storage Tool - for troubleshooting
+  server.tool(
+    'debug_oauth_sessions',
+    'Debug OAuth session storage across all sources',
+    {},
+    async () => {
+      try {
+        // Get static session store state
+        const memoryStore = (oauthManager as any).constructor.sessionStore;
+        const memorySize = memoryStore ? memoryStore.size : 0;
+        const memoryStates = memoryStore ? Array.from(memoryStore.keys()) : [];
+
+        // Check environment variables
+        const envSessions = Object.keys(process.env).filter(key => key.startsWith('OAUTH_SESSION_'));
+        const envStates = envSessions.map(key => key.replace('OAUTH_SESSION_', ''));
+
+        // Check global storage
+        const globalSessions = (globalThis as any).oauthSessions;
+        const globalSize = globalSessions ? globalSessions.size : 0;
+        const globalStates = globalSessions ? Array.from(globalSessions.keys()) : [];
+
+        // Check file storage
+        let fileStates: string[] = [];
+        try {
+          const fs = require('fs');
+          const os = require('os');
+          const path = require('path');
+          const sessionFile = path.join(os.tmpdir(), 'jira-oauth-sessions.json');
+          
+          if (fs.existsSync(sessionFile)) {
+            const fileContent = fs.readFileSync(sessionFile, 'utf8');
+            const fileSessions = JSON.parse(fileContent) as Record<string, any>;
+            fileStates = Object.keys(fileSessions);
+          }
+        } catch (error) {
+          // File read failed
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: '🔍 **OAuth Session Storage Debug Report**\n\n' +
+                  `**Process Info:**\n` +
+                  `• Process PID: ${process.pid}\n` +
+                  `• Node Version: ${process.version}\n` +
+                  `• Environment: ${process.env.NODE_ENV || 'development'}\n` +
+                  `• Timestamp: ${new Date().toISOString()}\n\n` +
+                  
+                  `**Memory Store:**\n` +
+                  `• Size: ${memorySize}\n` +
+                  `• States: [${memoryStates.join(', ')}]\n\n` +
+                  
+                  `**Environment Variables:**\n` +
+                  `• Count: ${envSessions.length}\n` +
+                  `• States: [${envStates.join(', ')}]\n\n` +
+                  
+                  `**Global Storage:**\n` +
+                  `• Size: ${globalSize}\n` +
+                  `• States: [${globalStates.join(', ')}]\n\n` +
+                  
+                  `**File Storage:**\n` +
+                  `• Count: ${fileStates.length}\n` +
+                  `• States: [${fileStates.join(', ')}]\n\n` +
+                  
+                  `**Total Unique Sessions:** ${new Set([...memoryStates, ...envStates, ...globalStates, ...fileStates]).size}\n\n` +
+                  
+                  `**Troubleshooting:**\n` +
+                  `• If sessions show during URL generation but not during callback, this indicates separate processes\n` +
+                  `• Check Smithery logs for "TOKEN EXCHANGE DEBUG START" and "SESSION STORAGE DEBUG" messages\n` +
+                  `• Process PID differences confirm separate container instances`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ **Debug Error**: ${error instanceof Error ? error.message : String(error)}`
+          }]
+        };
+      }
+    }
+  );
+
   // Start OAuth Flow Tool - with Smithery-compatible session handling
   server.tool(
     'start_oauth',

@@ -185,20 +185,83 @@ export class JiraOAuthManager {
    * ✅ PRODUCTION FIX: Hybrid session storage across all instances
    */
   private storeSession(state: string, session: OAuthSession): void {
-    console.log(`💾 Storing session in hybrid storage: ${state}`);
+    console.log(`💾 ============ SESSION STORAGE DEBUG ============`);
+    console.log(`💾 Storing session: ${state}`);
+    console.log(`📧 Session email: ${session.userEmail || 'N/A'}`);
+    console.log(`🔗 Session redirect URI: ${session.redirectUri}`);
+    console.log(`⏰ Session timestamp: ${new Date(session.timestamp).toISOString()}`);
+    
+    let storageResults = {
+      memory: false,
+      environment: false,
+      global: false,
+      file: false
+    };
     
     // Store directly in memory
-    JiraOAuthManager.sessionStore.set(state, session);
+    try {
+      JiraOAuthManager.sessionStore.set(state, session);
+      storageResults.memory = true;
+      console.log(`✅ Stored in memory (size: ${JiraOAuthManager.sessionStore.size})`);
+    } catch (error) {
+      console.error(`❌ Memory storage failed:`, error);
+    }
+    
+    // Store in environment variables
+    try {
+      process.env[`OAUTH_SESSION_${state}`] = JSON.stringify(session);
+      storageResults.environment = true;
+      console.log(`✅ Stored in environment variables`);
+    } catch (error) {
+      console.error(`❌ Environment storage failed:`, error);
+    }
+    
+    // Store in global storage
+    try {
+      if (!(globalThis as any).oauthSessions) {
+        (globalThis as any).oauthSessions = new Map();
+      }
+      (globalThis as any).oauthSessions.set(state, session);
+      storageResults.global = true;
+      console.log(`✅ Stored in global storage (size: ${(globalThis as any).oauthSessions.size})`);
+    } catch (error) {
+      console.error(`❌ Global storage failed:`, error);
+    }
     
     // Also update file-based storage
-    const sessions = this.getStoredSessions();
-    sessions.set(state, session);
-    this.saveStoredSessions(sessions);
+    try {
+      const sessions = this.getStoredSessions();
+      sessions.set(state, session);
+      this.saveStoredSessions(sessions);
+      storageResults.file = true;
+      console.log(`✅ Stored in file storage`);
+    } catch (error) {
+      console.error(`❌ File storage failed:`, error);
+    }
+    
+    const successCount = Object.values(storageResults).filter(Boolean).length;
+    console.log(`📊 Session stored in ${successCount}/4 storage methods`);
+    console.log(`💾 Storage results:`, storageResults);
+    console.log(`💾 ============ SESSION STORAGE COMPLETE ============`);
     
     // Auto-cleanup after TTL
     setTimeout(() => {
       console.log(`🧹 Auto-cleaning expired session: ${state}`);
       JiraOAuthManager.sessionStore.delete(state);
+      
+      try {
+        delete process.env[`OAUTH_SESSION_${state}`];
+      } catch (error) {
+        console.warn('⚠️ Environment cleanup failed:', error);
+      }
+      
+      try {
+        if ((globalThis as any).oauthSessions) {
+          (globalThis as any).oauthSessions.delete(state);
+        }
+      } catch (error) {
+        console.warn('⚠️ Global cleanup failed:', error);
+      }
       
       const currentSessions = this.getStoredSessions();
       if (currentSessions.has(state)) {
@@ -344,18 +407,32 @@ export class JiraOAuthManager {
    * Generate OAuth authorization URL with PKCE for individual user
    */
   generateAuthUrl(userEmail?: string): { authUrl: string; state: string } {
+    console.log('🔗 ============ OAUTH URL GENERATION DEBUG START ============');
+    console.log(`🔗 Generating OAuth URL...`);
+    console.log(`📧 User email: ${userEmail || 'N/A'}`);
+    console.log(`⏰ Generation timestamp: ${new Date().toISOString()}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📍 Process PID: ${process.pid}`);
+    
     const state = this.generateSecureRandom(32);
     const codeVerifier = this.generateCodeVerifier();
     const codeChallenge = this.generateCodeChallenge(codeVerifier);
     
+    console.log(`🎲 Generated state: ${state}`);
+    console.log(`🔑 Generated code verifier: ${codeVerifier.substring(0, 10)}...`);
+    console.log(`🔐 Generated code challenge: ${codeChallenge.substring(0, 10)}...`);
+    
     // Store session for later verification
-    this.storeSession(state, {
+    const sessionData = {
       state,
       codeVerifier,
       redirectUri: this.config.redirectUri,
       timestamp: Date.now(),
       userEmail
-    });
+    };
+    
+    console.log('💾 Storing session data...');
+    this.storeSession(state, sessionData);
 
     // Build authorization parameters
     const params = new URLSearchParams({
@@ -387,13 +464,40 @@ export class JiraOAuthManager {
    * Exchange authorization code for access token
    */
   async exchangeCodeForToken(code: string, state: string): Promise<TokenResponse> {
-    console.log('🔄 Starting token exchange...');
-    console.log('🔍 Looking for session with state:', state);
-    console.log('📊 Available sessions:', Array.from(this.getStoredSessions().keys()));
+    console.log('🔄 ============ TOKEN EXCHANGE DEBUG START ============');
+    console.log(`🔄 Starting token exchange...`);
+    console.log(`📝 Received code: ${code ? `${code.substring(0, 10)}...` : 'MISSING'}`);
+    console.log(`🏷️ Received state: ${state}`);
+    console.log(`⏰ Exchange timestamp: ${new Date().toISOString()}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📍 Process PID: ${process.pid}`);
     
+    // Debug: Check all possible session sources before lookup
+    console.log('📊 PRE-LOOKUP SESSION INVENTORY:');
+    console.log(`  Memory store size: ${JiraOAuthManager.sessionStore.size}`);
+    console.log(`  Memory states: [${Array.from(JiraOAuthManager.sessionStore.keys()).join(', ')}]`);
+    
+    const envSessions = Object.keys(process.env).filter(key => key.startsWith('OAUTH_SESSION_'));
+    console.log(`  Environment sessions: ${envSessions.length}`);
+    console.log(`  Environment states: [${envSessions.map(key => key.replace('OAUTH_SESSION_', '')).join(', ')}]`);
+    
+    const globalSessions = (globalThis as any).oauthSessions;
+    console.log(`  Global sessions: ${globalSessions ? globalSessions.size : 0}`);
+    if (globalSessions) {
+      console.log(`  Global states: [${Array.from(globalSessions.keys()).join(', ')}]`);
+    }
+    
+    console.log('🔍 Now performing session lookup...');
     const session = this.getSession(state);
+    
     if (!session) {
-      console.error('❌ OAuth session not found for state:', state);
+      console.error('❌ ============ OAUTH SESSION NOT FOUND ============');
+      console.error(`❌ Failed to find session for state: "${state}"`);
+      console.error(`❌ Searched in ${JiraOAuthManager.sessionStore.size} memory sessions`);
+      console.error(`❌ Searched in ${envSessions.length} environment sessions`);
+      console.error(`❌ Searched in ${globalSessions ? globalSessions.size : 0} global sessions`);
+      console.error(`❌ This indicates a critical session persistence issue in the deployment`);
+      console.error('❌ ================================================');
       throw new Error('Invalid or expired OAuth state parameter. Please restart the authentication flow.');
     }
 
