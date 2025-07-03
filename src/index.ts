@@ -71,14 +71,40 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     }
   );
 
-  // Start OAuth Flow Tool - instant response
+  // Start OAuth Flow Tool - with Smithery-compatible session handling
   server.tool(
     'start_oauth',
     'Start browser OAuth authentication flow',
     {},
     async () => {
       try {
+        // Generate OAuth URL with extended session TTL for Smithery
         const { authUrl, state } = oauthManager.generateAuthUrl(config.userEmail);
+        
+        // Store session data in a more persistent way for Smithery
+        const sessionData = {
+          state,
+          userEmail: config.userEmail,
+          companyUrl: config.companyUrl,
+          timestamp: Date.now(),
+          redirectUri: oauthManager.getConfig().redirectUri
+        };
+        
+        // Try multiple storage methods for reliability
+        try {
+          // Method 1: Environment variable (for same-process callback)
+          process.env[`OAUTH_SESSION_${state}`] = JSON.stringify(sessionData);
+          
+          // Method 2: Global storage (for in-memory persistence)
+          if (!(globalThis as any).oauthSessions) {
+            (globalThis as any).oauthSessions = new Map();
+          }
+          (globalThis as any).oauthSessions.set(state, sessionData);
+          
+          console.log(`💾 Stored OAuth session in multiple locations: ${state}`);
+        } catch (storageError) {
+          console.warn('⚠️ Session storage warning:', storageError);
+        }
 
         return {
           content: [{
@@ -90,7 +116,10 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
                   '3. **Return here** - your tokens will be automatically configured\n\n' +
                   `**Company:** ${config.companyUrl}\n` +
                   `**Email:** ${config.userEmail}\n` +
-                  `**State:** ${state}`
+                  `**State:** ${state}\n\n` +
+                  `**Debug Info:**\n` +
+                  `- Session stored in ${Object.keys(sessionData).length} locations\n` +
+                  `- Redirect URI: ${sessionData.redirectUri}`
           }]
         };
       } catch (error) {
@@ -298,10 +327,23 @@ if (process.env.START_HTTP_SERVER === 'true' || process.argv.includes('--http-se
     
     if (code && state) {
       try {
-        console.log('🔄 Processing OAuth callback...');
+        console.log('🔄 Processing OAuth callback in MCP server...');
+        console.log(`🔍 Looking for session with state: ${state}`);
+        
+        // Clean up environment variable session after successful lookup
+        try {
+          const envKey = `OAUTH_SESSION_${state}`;
+          if (process.env[envKey]) {
+            console.log('✅ Found session in environment - cleaning up after use');
+            delete process.env[envKey];
+          }
+        } catch (error) {
+          console.log('⚠️ Environment cleanup warning:', error);
+        }
+        
         const tokenResponse = await callbackOAuthManager.exchangeCodeForToken(code as string, state as string);
         
-        console.log('✅ OAuth token exchange successful');
+        console.log('✅ OAuth token exchange successful in MCP server');
         
         res.send(`
           <html><body style="font-family: Arial, sans-serif; padding: 20px; text-align: center;">

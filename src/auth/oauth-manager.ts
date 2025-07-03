@@ -209,37 +209,70 @@ export class JiraOAuthManager {
   }
 
   /**
-   * ✅ PRODUCTION FIX: Hybrid session lookup across all instances
+   * ✅ PRODUCTION FIX: Multi-source session lookup for Smithery compatibility
    */
   private getSession(state: string): OAuthSession | undefined {
-    // Check in-memory store first
-    let session = JiraOAuthManager.sessionStore.get(state);
+    console.log(`🔍 Multi-source session lookup for state: ${state}`);
     
-    if (!session) {
-      // Fallback to file-based storage
+    // Method 1: Check in-memory store
+    let session = JiraOAuthManager.sessionStore.get(state);
+    if (session) {
+      console.log(`✅ Found session in memory store`);
+      return session;
+    }
+    
+    // Method 2: Check environment variables (for same-process)
+    try {
+      const envKey = `OAUTH_SESSION_${state}`;
+      const envData = process.env[envKey];
+      if (envData) {
+        session = JSON.parse(envData) as OAuthSession;
+        console.log(`✅ Found session in environment variables`);
+        return session;
+      }
+    } catch (error) {
+      console.log(`⚠️ Failed to parse env session data:`, error);
+    }
+    
+    // Method 3: Check global storage
+    try {
+      if ((globalThis as any).oauthSessions) {
+        session = (globalThis as any).oauthSessions.get(state);
+        if (session) {
+          console.log(`✅ Found session in global storage`);
+          return session;
+        }
+      }
+    } catch (error) {
+      console.log(`⚠️ Failed to access global storage:`, error);
+    }
+    
+    // Method 4: Fallback to file-based storage
+    try {
       const sessions = this.getStoredSessions();
       session = sessions.get(state);
+      if (session) {
+        console.log(`✅ Found session in file storage`);
+        return session;
+      }
+    } catch (error) {
+      console.log(`⚠️ Failed to access file storage:`, error);
     }
     
-    console.log(`🔍 Looking up session ${state}: ${session ? 'FOUND' : 'NOT FOUND'}`);
+    // Debug information
+    console.log(`❌ Session NOT FOUND in any storage method`);
     console.log(`📊 Memory sessions: ${JiraOAuthManager.sessionStore.size}`);
+    console.log(`🌍 Global sessions: ${(globalThis as any).oauthSessions?.size || 0}`);
     console.log(`📁 Session file location: ${JiraOAuthManager.SESSION_FILE}`);
     
-    // Debug: show all available session states
     const memoryStates = Array.from(JiraOAuthManager.sessionStore.keys());
-    console.log(`🗝️ Memory session states: [${memoryStates.join(', ')}]`);
+    console.log(`🗝️ Available memory states: [${memoryStates.join(', ')}]`);
     
-    if (session) {
-      console.log(`⏰ Session timestamp: ${new Date(session.timestamp).toISOString()}`);
-      console.log(`⌛ Session age: ${Math.round((Date.now() - session.timestamp) / 1000)}s`);
-      console.log(`📧 Session email: ${session.userEmail || 'N/A'}`);
-      console.log(`🔗 Session redirect URI: ${session.redirectUri}`);
-    } else {
-      console.log(`❓ Searched for state: "${state}"`);
-      console.log(`❓ Available memory states: ${memoryStates.map(s => `"${s}"`).join(', ')}`);
-    }
+    // Check environment variables for debugging
+    const envSessions = Object.keys(process.env).filter(key => key.startsWith('OAUTH_SESSION_'));
+    console.log(`🔑 Environment sessions: [${envSessions.map(key => key.replace('OAUTH_SESSION_', '')).join(', ')}]`);
     
-    return session;
+    return undefined;
   }
 
   /**
@@ -276,6 +309,13 @@ export class JiraOAuthManager {
     } catch (error) {
       console.error('❌ Failed to clear sessions:', (error as Error).message);
     }
+  }
+
+  /**
+   * Get OAuth configuration
+   */
+  getConfig(): OAuthConfig {
+    return { ...this.config };
   }
 
   /**
