@@ -2,7 +2,7 @@
   "name": "jira-mcp-oauth",
   "version": "5.5.0-persistent-oauth-fix",
   "description": "Jira MCP Server with Browser OAuth Authentication for Smithery",
-  "main": "src/index-minimal.ts",
+  "main": "src/index-ultra-minimal.ts",
   "module": "src/index.ts",
   "type": "module",
   "scripts": {
