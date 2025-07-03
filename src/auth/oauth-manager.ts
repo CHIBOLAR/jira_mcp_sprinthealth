@@ -45,6 +45,25 @@ export class JiraOAuthManager {
   // ✅ PRODUCTION FIX: In-memory session storage with singleton pattern for Smithery
   private static sessionStore = new Map<string, OAuthSession>();
   private static readonly SESSION_FILE = `${tmpdir()}/jira-oauth-sessions.json`;
+  
+  // ✅ SINGLETON FIX: Global manager instances for session sharing
+  private static instances = new Map<string, JiraOAuthManager>();
+  
+  /**
+   * Create or get existing OAuth manager instance for the same configuration
+   */
+  static getInstance(companyUrl: string, customConfig?: Partial<AtlassianOAuthConfig>): JiraOAuthManager {
+    const configKey = `${companyUrl}:${customConfig?.clientId || 'default'}`;
+    
+    if (!JiraOAuthManager.instances.has(configKey)) {
+      console.log(`🔧 Creating new OAuth manager instance for: ${configKey}`);
+      JiraOAuthManager.instances.set(configKey, new JiraOAuthManager(companyUrl, customConfig));
+    } else {
+      console.log(`♻️ Reusing existing OAuth manager instance for: ${configKey}`);
+    }
+    
+    return JiraOAuthManager.instances.get(configKey)!;
+  }
 
   constructor(companyUrl: string, customConfig?: Partial<AtlassianOAuthConfig>) {
     // Determine if this is Atlassian Cloud or Server/Data Center

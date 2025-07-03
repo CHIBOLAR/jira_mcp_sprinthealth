@@ -30,12 +30,15 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
 
   console.log('🔧 Jira MCP Server Config:', config);
 
-  // Initialize OAuth Manager with proper configuration
-  const oauthManager = new JiraOAuthManager(config.companyUrl, {
+  // Initialize OAuth Manager with proper configuration using singleton pattern
+  const oauthConfig = {
     clientId: process.env.OAUTH_CLIENT_ID || process.env.JIRA_OAUTH_CLIENT_ID,
     clientSecret: process.env.OAUTH_CLIENT_SECRET || process.env.JIRA_OAUTH_CLIENT_SECRET,
     redirectUri: process.env.OAUTH_REDIRECT_URI || `${process.env.SERVER_URL || 'http://localhost:3000'}/oauth/callback`,
-  });
+  };
+  
+  console.log('🔧 Using singleton OAuth manager for MCP server');
+  const oauthManager = JiraOAuthManager.getInstance(config.companyUrl, oauthConfig);
 
   // All tools are designed to respond instantly to prevent timeouts
 
@@ -375,19 +378,34 @@ function extractJiraDomain(companyUrl: string): string {
   return domain;
 }
 
-// Start minimal HTTP server for OAuth callbacks only when explicitly requested
-if (process.env.START_HTTP_SERVER === 'true' || process.argv.includes('--http-server')) {
+// Start minimal HTTP server for OAuth callbacks 
+// Always start in Smithery deployments, or when explicitly requested
+const isSmitheryDeployment = process.env.SMITHERY_HOSTNAME || process.env.NODE_ENV === 'production';
+if (isSmitheryDeployment || process.env.START_HTTP_SERVER === 'true' || process.argv.includes('--http-server')) {
   const PORT = parseInt(process.env.PORT || '3000');
   const app = express();
   
   app.use(cors());
   app.use(express.json());
   
-  // Initialize OAuth manager for callback handling
-  const callbackOAuthManager = new JiraOAuthManager(process.env.JIRA_URL || 'https://codegenie.atlassian.net', {
+  // Initialize OAuth manager for callback handling - USE SAME CONFIG AS MCP SERVER
+  console.log('🔧 Starting HTTP server for OAuth callbacks...');
+  console.log(`📍 Smithery deployment: ${isSmitheryDeployment}`);
+  console.log(`🌐 Port: ${PORT}`);
+  
+  // Create a dummy config to match the MCP server configuration
+  const callbackConfig = {
+    companyUrl: process.env.JIRA_URL || 'https://codegenie.atlassian.net',
+    userEmail: process.env.USER_EMAIL || 'user@example.com',
+    authMethod: 'oauth' as const
+  };
+  
+  // Use the SAME OAuth manager instance via singleton pattern
+  console.log('🔧 Using singleton OAuth manager for callback handling');
+  const callbackOAuthManager = JiraOAuthManager.getInstance(callbackConfig.companyUrl, {
     clientId: process.env.OAUTH_CLIENT_ID || process.env.JIRA_OAUTH_CLIENT_ID,
     clientSecret: process.env.OAUTH_CLIENT_SECRET || process.env.JIRA_OAUTH_CLIENT_SECRET,
-    redirectUri: process.env.OAUTH_REDIRECT_URI || `${process.env.SERVER_URL || 'http://localhost:3000'}/oauth/callback`,
+    redirectUri: process.env.OAUTH_REDIRECT_URI || `${process.env.SERVER_URL || `http://localhost:${PORT}`}/oauth/callback`,
   });
   
   // OAuth callback endpoint
@@ -482,8 +500,17 @@ if (process.env.START_HTTP_SERVER === 'true' || process.argv.includes('--http-se
   });
   
   app.listen(PORT, () => {
+    console.log('🚀 ============ HTTP SERVER STARTED ============');
     console.log(`🚀 Jira MCP OAuth server running on http://localhost:${PORT}`);
     console.log(`🔐 OAuth callback: http://localhost:${PORT}/oauth/callback`);
     console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    console.log(`🌐 Smithery deployment: ${isSmitheryDeployment}`);
+    console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log('🚀 ============ READY FOR OAUTH FLOW ============');
   });
+} else {
+  console.log('⚠️ HTTP server NOT started - OAuth callbacks will not work');
+  console.log(`⚠️ Smithery deployment: ${isSmitheryDeployment}`);
+  console.log(`⚠️ START_HTTP_SERVER: ${process.env.START_HTTP_SERVER}`);
+  console.log(`⚠️ Command line args: ${process.argv.join(' ')}`);
 }
