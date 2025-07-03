@@ -42,9 +42,12 @@ export class JiraOAuthManager {
   private config: OAuthConfig;
   private readonly SESSION_TTL = 15 * 60 * 1000; // 15 minutes for OAuth flow
   
-  // ✅ PRODUCTION FIX: In-memory session storage with singleton pattern for Smithery
+  // ✅ SMITHERY FIX: Cross-container session storage with multiple persistence layers
   private static sessionStore = new Map<string, OAuthSession>();
   private static readonly SESSION_FILE = `${tmpdir()}/jira-oauth-sessions.json`;
+  private static readonly SMITHERY_SESSION_FILE = '/tmp/smithery-jira-oauth-sessions.json';
+  private static readonly PERSISTENT_SESSION_DIR = process.env.HOME ? `${process.env.HOME}/.jira-mcp` : '/tmp';
+  private static readonly PERSISTENT_SESSION_FILE = `${JiraOAuthManager.PERSISTENT_SESSION_DIR}/oauth-sessions.json`;
   
   // ✅ SINGLETON FIX: Global manager instances for session sharing
   private static instances = new Map<string, JiraOAuthManager>();
@@ -150,54 +153,127 @@ export class JiraOAuthManager {
   }
 
   /**
-   * ✅ PRODUCTION FIX: Hybrid session storage - in-memory first, file-based fallback
+   * ✅ SMITHERY FIX: Multi-location session storage for cross-container persistence
    */
   private getStoredSessions(): Map<string, OAuthSession> {
-    // Try in-memory store first (for Smithery/production environments)
+    console.log('🔍 SMITHERY SESSION LOOKUP: Checking multiple storage locations...');
+    
+    // Try in-memory store first (same process)
     if (JiraOAuthManager.sessionStore.size > 0) {
-      console.log('📋 Using in-memory session store');
+      console.log('✅ Found sessions in memory store:', JiraOAuthManager.sessionStore.size);
       return new Map(JiraOAuthManager.sessionStore);
     }
 
-    // Fallback to file-based storage (for local development)
+    // Try persistent home directory storage (cross-container)
     try {
-      if (!existsSync(JiraOAuthManager.SESSION_FILE)) {
-        console.log('📋 No session file found, starting fresh');
-        return new Map();
+      if (existsSync(JiraOAuthManager.PERSISTENT_SESSION_FILE)) {
+        const fileContent = readFileSync(JiraOAuthManager.PERSISTENT_SESSION_FILE, 'utf8');
+        const sessions = JSON.parse(fileContent) as Record<string, OAuthSession>;
+        const sessionMap = new Map<string, OAuthSession>(Object.entries(sessions));
+        
+        if (sessionMap.size > 0) {
+          console.log('✅ Found sessions in persistent storage:', sessionMap.size);
+          // Populate in-memory store
+          sessionMap.forEach((session, state) => {
+            JiraOAuthManager.sessionStore.set(state, session);
+          });
+          return sessionMap;
+        }
       }
-      
-      const fileContent = readFileSync(JiraOAuthManager.SESSION_FILE, 'utf8');
-      const sessions = JSON.parse(fileContent) as Record<string, OAuthSession>;
-      const sessionMap = new Map<string, OAuthSession>(Object.entries(sessions));
-      
-      // Populate in-memory store from file
-      sessionMap.forEach((session, state) => {
-        JiraOAuthManager.sessionStore.set(state, session);
-      });
-      
-      console.log('📋 Loaded sessions from file to memory');
-      return sessionMap;
     } catch (error) {
-      console.warn('⚠️ Failed to read session file, using in-memory only:', (error as Error).message);
-      return new Map();
+      console.log('⚠️ Persistent storage read failed:', (error as Error).message);
     }
+
+    // Try Smithery-specific location
+    try {
+      if (existsSync(JiraOAuthManager.SMITHERY_SESSION_FILE)) {
+        const fileContent = readFileSync(JiraOAuthManager.SMITHERY_SESSION_FILE, 'utf8');
+        const sessions = JSON.parse(fileContent) as Record<string, OAuthSession>;
+        const sessionMap = new Map<string, OAuthSession>(Object.entries(sessions));
+        
+        if (sessionMap.size > 0) {
+          console.log('✅ Found sessions in Smithery storage:', sessionMap.size);
+          // Populate in-memory store
+          sessionMap.forEach((session, state) => {
+            JiraOAuthManager.sessionStore.set(state, session);
+          });
+          return sessionMap;
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Smithery storage read failed:', (error as Error).message);
+    }
+
+    // Fallback to default tmp storage
+    try {
+      if (existsSync(JiraOAuthManager.SESSION_FILE)) {
+        const fileContent = readFileSync(JiraOAuthManager.SESSION_FILE, 'utf8');
+        const sessions = JSON.parse(fileContent) as Record<string, OAuthSession>;
+        const sessionMap = new Map<string, OAuthSession>(Object.entries(sessions));
+        
+        if (sessionMap.size > 0) {
+          console.log('✅ Found sessions in tmp storage:', sessionMap.size);
+          // Populate in-memory store
+          sessionMap.forEach((session, state) => {
+            JiraOAuthManager.sessionStore.set(state, session);
+          });
+          return sessionMap;
+        }
+      }
+    } catch (error) {
+      console.log('⚠️ Tmp storage read failed:', (error as Error).message);
+    }
+
+    console.log('❌ No sessions found in any storage location');
+    return new Map();
   }
 
   private saveStoredSessions(sessions: Map<string, OAuthSession>): void {
+    console.log('💾 SMITHERY SESSION SAVE: Writing to multiple locations...');
+    
     // Save to in-memory store first
     JiraOAuthManager.sessionStore.clear();
     sessions.forEach((session, state) => {
       JiraOAuthManager.sessionStore.set(state, session);
     });
+    console.log('✅ Saved to memory store:', sessions.size, 'sessions');
     
-    // Also try to save to file as backup (may fail in production environments)
+    const sessionObj = Object.fromEntries(sessions.entries());
+    const sessionData = JSON.stringify(sessionObj, null, 2);
+    let saveCount = 0;
+    
+    // Try to save to persistent home directory (best for cross-container)
     try {
-      const sessionObj = Object.fromEntries(sessions.entries());
-      writeFileSync(JiraOAuthManager.SESSION_FILE, JSON.stringify(sessionObj, null, 2), 'utf8');
-      console.log('💾 Sessions saved to both memory and file');
+      // Ensure directory exists
+      if (!existsSync(JiraOAuthManager.PERSISTENT_SESSION_DIR)) {
+        require('fs').mkdirSync(JiraOAuthManager.PERSISTENT_SESSION_DIR, { recursive: true });
+      }
+      writeFileSync(JiraOAuthManager.PERSISTENT_SESSION_FILE, sessionData, 'utf8');
+      console.log('✅ Saved to persistent storage:', JiraOAuthManager.PERSISTENT_SESSION_FILE);
+      saveCount++;
     } catch (error) {
-      console.warn('⚠️ Failed to save sessions to file (using memory only):', (error as Error).message);
+      console.log('⚠️ Persistent storage save failed:', (error as Error).message);
     }
+    
+    // Try to save to Smithery-specific location
+    try {
+      writeFileSync(JiraOAuthManager.SMITHERY_SESSION_FILE, sessionData, 'utf8');
+      console.log('✅ Saved to Smithery storage:', JiraOAuthManager.SMITHERY_SESSION_FILE);
+      saveCount++;
+    } catch (error) {
+      console.log('⚠️ Smithery storage save failed:', (error as Error).message);
+    }
+    
+    // Try to save to default tmp location
+    try {
+      writeFileSync(JiraOAuthManager.SESSION_FILE, sessionData, 'utf8');
+      console.log('✅ Saved to tmp storage:', JiraOAuthManager.SESSION_FILE);
+      saveCount++;
+    } catch (error) {
+      console.log('⚠️ Tmp storage save failed:', (error as Error).message);
+    }
+    
+    console.log(`💾 Sessions saved to ${saveCount} file locations + memory`);
   }
 
   /**
@@ -341,11 +417,13 @@ export class JiraOAuthManager {
       console.log(`⚠️ Failed to access file storage:`, error);
     }
     
-    // Debug information
-    console.log(`❌ Session NOT FOUND in any storage method`);
+    // Debug information for Smithery troubleshooting
+    console.log(`❌ SMITHERY SESSION LOOKUP FAILED`);
     console.log(`📊 Memory sessions: ${JiraOAuthManager.sessionStore.size}`);
     console.log(`🌍 Global sessions: ${(globalThis as any).oauthSessions?.size || 0}`);
-    console.log(`📁 Session file location: ${JiraOAuthManager.SESSION_FILE}`);
+    console.log(`📁 Persistent file: ${JiraOAuthManager.PERSISTENT_SESSION_FILE} (exists: ${existsSync(JiraOAuthManager.PERSISTENT_SESSION_FILE)})`);
+    console.log(`📁 Smithery file: ${JiraOAuthManager.SMITHERY_SESSION_FILE} (exists: ${existsSync(JiraOAuthManager.SMITHERY_SESSION_FILE)})`);
+    console.log(`📁 Tmp file: ${JiraOAuthManager.SESSION_FILE} (exists: ${existsSync(JiraOAuthManager.SESSION_FILE)})`);
     
     const memoryStates = Array.from(JiraOAuthManager.sessionStore.keys());
     console.log(`🗝️ Available memory states: [${memoryStates.join(', ')}]`);
@@ -353,6 +431,14 @@ export class JiraOAuthManager {
     // Check environment variables for debugging
     const envSessions = Object.keys(process.env).filter(key => key.startsWith('OAUTH_SESSION_'));
     console.log(`🔑 Environment sessions: [${envSessions.map(key => key.replace('OAUTH_SESSION_', '')).join(', ')}]`);
+    
+    // Additional Smithery debugging
+    console.log(`🌍 Process PID: ${process.pid}`);
+    console.log(`🌍 Working dir: ${process.cwd()}`);
+    console.log(`🌍 Home dir: ${process.env.HOME || 'not set'}`);
+    console.log(`🌍 Tmp dir: ${require('os').tmpdir()}`);
+    console.log(`🌍 Smithery hostname: ${process.env.SMITHERY_HOSTNAME || 'not set'}`);
+    console.log(`🌍 Container isolation suspected: different containers for MCP vs HTTP server`);
     
     return undefined;
   }
