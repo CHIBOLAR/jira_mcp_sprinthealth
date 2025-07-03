@@ -175,88 +175,7 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     }
   );
 
-  // Debug Session Storage Tool - for troubleshooting
-  server.tool(
-    'debug_oauth_sessions',
-    'Debug OAuth session storage across all sources',
-    {},
-    async () => {
-      try {
-        // Get static session store state
-        const memoryStore = (oauthManager as any).constructor.sessionStore;
-        const memorySize = memoryStore ? memoryStore.size : 0;
-        const memoryStates = memoryStore ? Array.from(memoryStore.keys()) : [];
-
-        // Check environment variables
-        const envSessions = Object.keys(process.env).filter(key => key.startsWith('OAUTH_SESSION_'));
-        const envStates = envSessions.map(key => key.replace('OAUTH_SESSION_', ''));
-
-        // Check global storage
-        const globalSessions = (globalThis as any).oauthSessions;
-        const globalSize = globalSessions ? globalSessions.size : 0;
-        const globalStates = globalSessions ? Array.from(globalSessions.keys()) : [];
-
-        // Check file storage
-        let fileStates: string[] = [];
-        try {
-          const fs = require('fs');
-          const os = require('os');
-          const path = require('path');
-          const sessionFile = path.join(os.tmpdir(), 'jira-oauth-sessions.json');
-          
-          if (fs.existsSync(sessionFile)) {
-            const fileContent = fs.readFileSync(sessionFile, 'utf8');
-            const fileSessions = JSON.parse(fileContent) as Record<string, any>;
-            fileStates = Object.keys(fileSessions);
-          }
-        } catch (error) {
-          // File read failed
-        }
-
-        return {
-          content: [{
-            type: 'text',
-            text: '🔍 **OAuth Session Storage Debug Report**\n\n' +
-                  `**Process Info:**\n` +
-                  `• Process PID: ${process.pid}\n` +
-                  `• Node Version: ${process.version}\n` +
-                  `• Environment: ${process.env.NODE_ENV || 'development'}\n` +
-                  `• Timestamp: ${new Date().toISOString()}\n\n` +
-                  
-                  `**Memory Store:**\n` +
-                  `• Size: ${memorySize}\n` +
-                  `• States: [${memoryStates.join(', ')}]\n\n` +
-                  
-                  `**Environment Variables:**\n` +
-                  `• Count: ${envSessions.length}\n` +
-                  `• States: [${envStates.join(', ')}]\n\n` +
-                  
-                  `**Global Storage:**\n` +
-                  `• Size: ${globalSize}\n` +
-                  `• States: [${globalStates.join(', ')}]\n\n` +
-                  
-                  `**File Storage:**\n` +
-                  `• Count: ${fileStates.length}\n` +
-                  `• States: [${fileStates.join(', ')}]\n\n` +
-                  
-                  `**Total Unique Sessions:** ${new Set([...memoryStates, ...envStates, ...globalStates, ...fileStates]).size}\n\n` +
-                  
-                  `**Troubleshooting:**\n` +
-                  `• If sessions show during URL generation but not during callback, this indicates separate processes\n` +
-                  `• Check Smithery logs for "TOKEN EXCHANGE DEBUG START" and "SESSION STORAGE DEBUG" messages\n` +
-                  `• Process PID differences confirm separate container instances`
-          }]
-        };
-      } catch (error) {
-        return {
-          content: [{
-            type: 'text',
-            text: `❌ **Debug Error**: ${error instanceof Error ? error.message : String(error)}`
-          }]
-        };
-      }
-    }
-  );
+  // Note: Debug OAuth tool removed from production for security
 
   // Start OAuth Flow Tool - with Smithery-compatible session handling
   server.tool(
@@ -352,22 +271,72 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
       issueKey: z.string().describe('Jira issue key (e.g., "PROJ-123")')
     },
     async ({ issueKey }) => {
-      // Extract Jira domain from user's company URL
-      const jiraDomain = extractJiraDomain(config.companyUrl);
-      
-      return {
-        content: [{
-          type: 'text',
-          text: `📋 **Issue: ${issueKey}**\n\n` +
-                `**Company:** ${config.companyUrl}\n` +
-                `**Jira Domain:** ${jiraDomain}\n` +
-                `**User:** ${config.userEmail}\n\n` +
-                '✅ **OAuth Authenticated Request**\n' +
-                `🔗 **API URL:** https://api.atlassian.com/ex/jira/${jiraDomain}/rest/api/3/issue/${issueKey}\n\n` +
-                '(In production: Real Jira API data would be shown here)\n\n' +
-                '**Note:** Complete OAuth authentication first using **start_oauth**'
-        }]
-      };
+      try {
+        // Load saved OAuth tokens
+        const fs = await import('fs');
+        const os = await import('os');
+        const path = await import('path');
+        
+        const tokenFile = path.join(os.tmpdir(), 'jira-mcp-tokens.json');
+        
+        if (!fs.existsSync(tokenFile)) {
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Not Authenticated**\n\nPlease run **start_oauth** first to authenticate with Jira.'
+            }]
+          };
+        }
+        
+        const tokenData = JSON.parse(fs.readFileSync(tokenFile, 'utf8'));
+        const jiraDomain = extractJiraDomain(config.companyUrl);
+        
+        // Make API request to Jira
+        const apiUrl = `https://api.atlassian.com/ex/jira/${jiraDomain}/rest/api/3/issue/${issueKey}`;
+        
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${tokenData.access_token}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ **API Error (${response.status})**\n\n${errorText}\n\nPlease check the issue key and try again.`
+            }]
+          };
+        }
+        
+        const issue = await response.json();
+        
+        return {
+          content: [{
+            type: 'text',
+            text: `📋 **${issue.key}: ${issue.fields.summary}**\n\n` +
+                  `**Status:** ${issue.fields.status.name}\n` +
+                  `**Type:** ${issue.fields.issuetype.name}\n` +
+                  `**Priority:** ${issue.fields.priority?.name || 'Not set'}\n` +
+                  `**Assignee:** ${issue.fields.assignee?.displayName || 'Unassigned'}\n` +
+                  `**Reporter:** ${issue.fields.reporter?.displayName || 'Unknown'}\n` +
+                  `**Created:** ${new Date(issue.fields.created).toLocaleDateString()}\n` +
+                  `**Updated:** ${new Date(issue.fields.updated).toLocaleDateString()}\n\n` +
+                  `**Description:**\n${issue.fields.description?.content?.[0]?.content?.[0]?.text || 'No description'}\n\n` +
+                  `**Project:** ${issue.fields.project.name} (${issue.fields.project.key})`
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ **Error:** ${error instanceof Error ? error.message : String(error)}`
+          }]
+        };
+      }
     }
   );
 
@@ -379,22 +348,87 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
       jql: z.string().describe('JQL query (e.g., "project = PROJ AND status = Open")')
     },
     async ({ jql }) => {
-      // Extract Jira domain from user's company URL
-      const jiraDomain = extractJiraDomain(config.companyUrl);
-      
-      return {
-        content: [{
-          type: 'text',
-          text: `🔍 **Jira Search: ${jql}**\n\n` +
-                `**Company:** ${config.companyUrl}\n` +
-                `**Jira Domain:** ${jiraDomain}\n` +
-                `**User:** ${config.userEmail}\n\n` +
-                '✅ **OAuth Authenticated Search**\n' +
-                `🔗 **API URL:** https://api.atlassian.com/ex/jira/${jiraDomain}/rest/api/3/search?jql=${encodeURIComponent(jql)}\n\n` +
-                '(In production: Real search results would be shown here)\n\n' +
-                '**Note:** Complete OAuth authentication first using **start_oauth**'
-        }]
-      };
+      try {
+        // Load saved OAuth tokens
+        const fs = await import('fs');
+        const os = await import('os');
+        const path = await import('path');
+        
+        const tokenFile = path.join(os.tmpdir(), 'jira-mcp-tokens.json');
+        
+        if (!fs.existsSync(tokenFile)) {
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Not Authenticated**\n\nPlease run **start_oauth** first to authenticate with Jira.'
+            }]
+          };
+        }
+        
+        const tokenData = JSON.parse(fs.readFileSync(tokenFile, 'utf8'));
+        const jiraDomain = extractJiraDomain(config.companyUrl);
+        
+        // Make API request to Jira
+        const apiUrl = `https://api.atlassian.com/ex/jira/${jiraDomain}/rest/api/3/search`;
+        
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${tokenData.access_token}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            jql,
+            maxResults: 20,
+            fields: ['summary', 'status', 'assignee', 'priority', 'issuetype', 'created', 'updated']
+          })
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ **API Error (${response.status})**\n\n${errorText}\n\nPlease check your JQL query and try again.`
+            }]
+          };
+        }
+        
+        const searchResults = await response.json();
+        
+        if (searchResults.total === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: `🔍 **No Results Found**\n\nJQL Query: ${jql}\n\nNo issues match your search criteria.`
+            }]
+          };
+        }
+        
+        let resultsText = `🔍 **Search Results (${searchResults.total} total)**\n\nJQL: ${jql}\n\n`;
+        
+        searchResults.issues.forEach((issue: any, index: number) => {
+          resultsText += `**${index + 1}. ${issue.key}** - ${issue.fields.summary}\n`;
+          resultsText += `   Status: ${issue.fields.status.name} | `;
+          resultsText += `Type: ${issue.fields.issuetype.name} | `;
+          resultsText += `Assignee: ${issue.fields.assignee?.displayName || 'Unassigned'}\n\n`;
+        });
+        
+        return {
+          content: [{
+            type: 'text',
+            text: resultsText
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ **Error:** ${error instanceof Error ? error.message : String(error)}`
+          }]
+        };
+      }
     }
   );
 
@@ -404,22 +438,84 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     'List accessible Jira projects',
     {},
     async () => {
-      // Extract Jira domain from user's company URL
-      const jiraDomain = extractJiraDomain(config.companyUrl);
-      
-      return {
-        content: [{
-          type: 'text',
-          text: '📂 **Jira Projects**\n\n' +
-                `**Company:** ${config.companyUrl}\n` +
-                `**Jira Domain:** ${jiraDomain}\n` +
-                `**User:** ${config.userEmail}\n\n` +
-                '✅ **OAuth Authenticated Request**\n' +
-                `🔗 **API URL:** https://api.atlassian.com/ex/jira/${jiraDomain}/rest/api/3/project\n\n` +
-                '(In production: Real project list would be shown here)\n\n' +
-                '**Note:** Complete OAuth authentication first using **start_oauth**'
-        }]
-      };
+      try {
+        // Load saved OAuth tokens
+        const fs = await import('fs');
+        const os = await import('os');
+        const path = await import('path');
+        
+        const tokenFile = path.join(os.tmpdir(), 'jira-mcp-tokens.json');
+        
+        if (!fs.existsSync(tokenFile)) {
+          return {
+            content: [{
+              type: 'text',
+              text: '❌ **Not Authenticated**\n\nPlease run **start_oauth** first to authenticate with Jira.'
+            }]
+          };
+        }
+        
+        const tokenData = JSON.parse(fs.readFileSync(tokenFile, 'utf8'));
+        const jiraDomain = extractJiraDomain(config.companyUrl);
+        
+        // Make API request to Jira
+        const apiUrl = `https://api.atlassian.com/ex/jira/${jiraDomain}/rest/api/3/project`;
+        
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${tokenData.access_token}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ **API Error (${response.status})**\n\n${errorText}\n\nPlease check your authentication and try again.`
+            }]
+          };
+        }
+        
+        const projects = await response.json();
+        
+        if (projects.length === 0) {
+          return {
+            content: [{
+              type: 'text',
+              text: '📂 **No Projects Found**\n\nYou don\'t have access to any Jira projects.'
+            }]
+          };
+        }
+        
+        let projectsText = `📂 **Jira Projects (${projects.length} total)**\n\n`;
+        
+        projects.forEach((project: any, index: number) => {
+          projectsText += `**${index + 1}. ${project.name}** (${project.key})\n`;
+          projectsText += `   Type: ${project.projectTypeKey} | `;
+          projectsText += `Lead: ${project.lead?.displayName || 'Unknown'}\n`;
+          if (project.description) {
+            projectsText += `   Description: ${project.description}\n`;
+          }
+          projectsText += '\n';
+        });
+        
+        return {
+          content: [{
+            type: 'text',
+            text: projectsText
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: 'text',
+            text: `❌ **Error:** ${error instanceof Error ? error.message : String(error)}`
+          }]
+        };
+      }
     }
   );
 
@@ -446,7 +542,6 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
                 '• oauth_status - Check OAuth setup\n' +
                 '• start_oauth - Start browser authentication\n' +
                 '• oauth_callback - Handle OAuth callback (auto-called)\n' +
-                '• debug_oauth_sessions - Debug session storage\n' +
                 '• test_jira_connection - Test connection\n' +
                 '• jira_get_issue - Get issue details\n' +
                 '• jira_search - Search with JQL\n' +
