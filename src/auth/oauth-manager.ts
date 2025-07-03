@@ -42,7 +42,8 @@ export class JiraOAuthManager {
   private config: OAuthConfig;
   private readonly SESSION_TTL = 15 * 60 * 1000; // 15 minutes for OAuth flow
   
-  // ✅ PERSISTENT FIX: File-based session storage across all instances
+  // ✅ PRODUCTION FIX: In-memory session storage with singleton pattern for Smithery
+  private static sessionStore = new Map<string, OAuthSession>();
   private static readonly SESSION_FILE = `${tmpdir()}/jira-oauth-sessions.json`;
 
   constructor(companyUrl: string, customConfig?: Partial<AtlassianOAuthConfig>) {
@@ -62,11 +63,12 @@ export class JiraOAuthManager {
       scopes: customConfig?.scopes || this.getDefaultScopes(isCloud)
     };
 
-    console.log('🔧 OAuth Manager initialized (PERSISTENT FILE MODE)');
+    console.log('🔧 OAuth Manager initialized (HYBRID STORAGE MODE)');
     console.log('🔗 Authorization URL:', this.config.authorizationUrl);
     console.log('🎯 Redirect URI:', this.config.redirectUri);
     console.log(`📁 Session file: ${JiraOAuthManager.SESSION_FILE}`);
-    console.log(`📊 Persistent sessions active: ${this.getStoredSessions().size}`);
+    console.log(`📊 Memory sessions: ${JiraOAuthManager.sessionStore.size}`);
+    console.log(`📊 Total sessions: ${this.getStoredSessions().size}`);
     
     // Cleanup expired sessions every 5 minutes
     setInterval(() => this.cleanupExpiredSessions(), 5 * 60 * 1000);
@@ -129,46 +131,77 @@ export class JiraOAuthManager {
   }
 
   /**
-   * ✅ PERSISTENT FIX: File-based session storage management
+   * ✅ PRODUCTION FIX: Hybrid session storage - in-memory first, file-based fallback
    */
   private getStoredSessions(): Map<string, OAuthSession> {
+    // Try in-memory store first (for Smithery/production environments)
+    if (JiraOAuthManager.sessionStore.size > 0) {
+      console.log('📋 Using in-memory session store');
+      return new Map(JiraOAuthManager.sessionStore);
+    }
+
+    // Fallback to file-based storage (for local development)
     try {
       if (!existsSync(JiraOAuthManager.SESSION_FILE)) {
+        console.log('📋 No session file found, starting fresh');
         return new Map();
       }
       
       const fileContent = readFileSync(JiraOAuthManager.SESSION_FILE, 'utf8');
-      const sessions = JSON.parse(fileContent);
-      return new Map(Object.entries(sessions));
+      const sessions = JSON.parse(fileContent) as Record<string, OAuthSession>;
+      const sessionMap = new Map<string, OAuthSession>(Object.entries(sessions));
+      
+      // Populate in-memory store from file
+      sessionMap.forEach((session, state) => {
+        JiraOAuthManager.sessionStore.set(state, session);
+      });
+      
+      console.log('📋 Loaded sessions from file to memory');
+      return sessionMap;
     } catch (error) {
-      console.warn('⚠️ Failed to read session file, starting fresh:', (error as Error).message);
+      console.warn('⚠️ Failed to read session file, using in-memory only:', (error as Error).message);
       return new Map();
     }
   }
 
   private saveStoredSessions(sessions: Map<string, OAuthSession>): void {
+    // Save to in-memory store first
+    JiraOAuthManager.sessionStore.clear();
+    sessions.forEach((session, state) => {
+      JiraOAuthManager.sessionStore.set(state, session);
+    });
+    
+    // Also try to save to file as backup (may fail in production environments)
     try {
       const sessionObj = Object.fromEntries(sessions.entries());
       writeFileSync(JiraOAuthManager.SESSION_FILE, JSON.stringify(sessionObj, null, 2), 'utf8');
+      console.log('💾 Sessions saved to both memory and file');
     } catch (error) {
-      console.error('❌ Failed to save sessions to file:', (error as Error).message);
+      console.warn('⚠️ Failed to save sessions to file (using memory only):', (error as Error).message);
     }
   }
 
   /**
-   * ✅ PERSISTENT FIX: File-based session storage across all instances
+   * ✅ PRODUCTION FIX: Hybrid session storage across all instances
    */
   private storeSession(state: string, session: OAuthSession): void {
-    console.log(`💾 Storing session in persistent file: ${state}`);
+    console.log(`💾 Storing session in hybrid storage: ${state}`);
+    
+    // Store directly in memory
+    JiraOAuthManager.sessionStore.set(state, session);
+    
+    // Also update file-based storage
     const sessions = this.getStoredSessions();
     sessions.set(state, session);
     this.saveStoredSessions(sessions);
     
     // Auto-cleanup after TTL
     setTimeout(() => {
+      console.log(`🧹 Auto-cleaning expired session: ${state}`);
+      JiraOAuthManager.sessionStore.delete(state);
+      
       const currentSessions = this.getStoredSessions();
       if (currentSessions.has(state)) {
-        console.log(`🧹 Auto-cleaning expired session: ${state}`);
         currentSessions.delete(state);
         this.saveStoredSessions(currentSessions);
       }
@@ -176,18 +209,25 @@ export class JiraOAuthManager {
   }
 
   /**
-   * ✅ PERSISTENT FIX: File-based session lookup across all instances
+   * ✅ PRODUCTION FIX: Hybrid session lookup across all instances
    */
   private getSession(state: string): OAuthSession | undefined {
-    const sessions = this.getStoredSessions();
-    const session = sessions.get(state);
+    // Check in-memory store first
+    let session = JiraOAuthManager.sessionStore.get(state);
+    
+    if (!session) {
+      // Fallback to file-based storage
+      const sessions = this.getStoredSessions();
+      session = sessions.get(state);
+    }
+    
     console.log(`🔍 Looking up session ${state}: ${session ? 'FOUND' : 'NOT FOUND'}`);
-    console.log(`📊 Total active sessions in file: ${sessions.size}`);
+    console.log(`📊 Memory sessions: ${JiraOAuthManager.sessionStore.size}`);
     console.log(`📁 Session file location: ${JiraOAuthManager.SESSION_FILE}`);
     
     // Debug: show all available session states
-    const allStates = Array.from(sessions.keys());
-    console.log(`🗝️ Available session states: [${allStates.join(', ')}]`);
+    const memoryStates = Array.from(JiraOAuthManager.sessionStore.keys());
+    console.log(`🗝️ Memory session states: [${memoryStates.join(', ')}]`);
     
     if (session) {
       console.log(`⏰ Session timestamp: ${new Date(session.timestamp).toISOString()}`);
@@ -196,34 +236,42 @@ export class JiraOAuthManager {
       console.log(`🔗 Session redirect URI: ${session.redirectUri}`);
     } else {
       console.log(`❓ Searched for state: "${state}"`);
-      console.log(`❓ Available states: ${allStates.map(s => `"${s}"`).join(', ')}`);
+      console.log(`❓ Available memory states: ${memoryStates.map(s => `"${s}"`).join(', ')}`);
     }
     
     return session;
   }
 
   /**
-   * ✅ PERSISTENT FIX: File-based session deletion across all instances
+   * ✅ PRODUCTION FIX: Hybrid session deletion across all instances
    */
   private deleteSession(state: string): void {
+    // Delete from memory first
+    const memoryDeleted = JiraOAuthManager.sessionStore.delete(state);
+    
+    // Delete from file storage
     const sessions = this.getStoredSessions();
-    const deleted = sessions.delete(state);
+    const fileDeleted = sessions.delete(state);
     this.saveStoredSessions(sessions);
-    console.log(`🗑️ Deleted session ${state}: ${deleted ? 'SUCCESS' : 'NOT FOUND'}`);
+    
+    console.log(`🗑️ Deleted session ${state}: Memory=${memoryDeleted ? 'SUCCESS' : 'NOT FOUND'}, File=${fileDeleted ? 'SUCCESS' : 'NOT FOUND'}`);
   }
 
   /**
-   * Clear all OAuth sessions (for debugging) - PERSISTENT FIX
+   * Clear all OAuth sessions (for debugging) - PRODUCTION FIX
    */
   clearAllSessions(): void {
     try {
-      const sessions = this.getStoredSessions();
-      const sessionCount = sessions.size;
+      const memoryCount = JiraOAuthManager.sessionStore.size;
+      const totalCount = this.getStoredSessions().size;
       
-      // Clear the file by writing empty object
+      // Clear memory store
+      JiraOAuthManager.sessionStore.clear();
+      
+      // Clear file store
       this.saveStoredSessions(new Map());
       
-      console.log(`✅ All ${sessionCount} OAuth sessions cleared from persistent file`);
+      console.log(`✅ All OAuth sessions cleared - Memory: ${memoryCount}, Total: ${totalCount}`);
       console.log(`📁 Session file: ${JiraOAuthManager.SESSION_FILE}`);
     } catch (error) {
       console.error('❌ Failed to clear sessions:', (error as Error).message);
