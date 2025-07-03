@@ -3,7 +3,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import dotenv from 'dotenv';
-import { JiraOAuthManager } from './auth/oauth-manager.js';
+import { StatelessJiraOAuthManager } from './auth/oauth-manager-stateless.js';
 
 // Load environment variables
 dotenv.config();
@@ -54,8 +54,8 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     redirectUri,
   };
   
-  console.log('🔧 Using OAuth manager for minimal MCP server');
-  const oauthManager = JiraOAuthManager.getInstance(config.companyUrl, oauthConfig);
+  console.log('🔧 Using stateless OAuth manager for Smithery cross-container deployment');
+  const oauthManager = new StatelessJiraOAuthManager(config.companyUrl, oauthConfig);
 
   // OAuth Status Check Tool
   server.tool(
@@ -94,7 +94,7 @@ export default function createJiraMCPServer({ config }: { config: Config }) {
     {},
     async () => {
       try {
-        const { authUrl, state } = oauthManager.generateAuthUrl(config.userEmail);
+        const { authUrl, state } = oauthManager.generateAuthUrl(config.userEmail, config.companyUrl);
         
         return {
           content: [{
