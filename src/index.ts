@@ -4,7 +4,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import express from 'express';
 import cors from 'cors';
+import dotenv from 'dotenv';
 import { JiraOAuthManager } from './auth/oauth-manager.js';
+
+// Load environment variables
+dotenv.config();
 
 // Configuration schema for Smithery CLI
 export const configSchema = z.object({

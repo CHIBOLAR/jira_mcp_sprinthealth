@@ -185,9 +185,18 @@ export class JiraOAuthManager {
     console.log(`📊 Total active sessions in file: ${sessions.size}`);
     console.log(`📁 Session file location: ${JiraOAuthManager.SESSION_FILE}`);
     
+    // Debug: show all available session states
+    const allStates = Array.from(sessions.keys());
+    console.log(`🗝️ Available session states: [${allStates.join(', ')}]`);
+    
     if (session) {
       console.log(`⏰ Session timestamp: ${new Date(session.timestamp).toISOString()}`);
       console.log(`⌛ Session age: ${Math.round((Date.now() - session.timestamp) / 1000)}s`);
+      console.log(`📧 Session email: ${session.userEmail || 'N/A'}`);
+      console.log(`🔗 Session redirect URI: ${session.redirectUri}`);
+    } else {
+      console.log(`❓ Searched for state: "${state}"`);
+      console.log(`❓ Available states: ${allStates.map(s => `"${s}"`).join(', ')}`);
     }
     
     return session;

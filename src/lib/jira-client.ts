@@ -81,14 +81,72 @@ export class JiraApiClient {
     });
 
     // Add authentication interceptor
-    this.axios.interceptors.request.use((requestConfig) => {
-      // For now, we'll use API token as fallback
-      // In production with OAuth, this would use the bearer token from the request context
+    this.axios.interceptors.request.use(async (requestConfig) => {
+      // ✅ CRITICAL FIX: Check for OAuth tokens first
+      try {
+        const fs = require('fs');
+        const os = require('os');
+        const path = require('path');
+        
+        const tokenFile = path.join(os.tmpdir(), 'jira-mcp-tokens.json');
+        if (fs.existsSync(tokenFile)) {
+          const tokenData = JSON.parse(fs.readFileSync(tokenFile, 'utf8'));
+          
+          // Check if token is still valid (not expired)
+          const tokenAge = Date.now() - tokenData.timestamp;
+          const expiryTime = (tokenData.expires_in || 3600) * 1000; // Convert to milliseconds
+          
+          if (tokenAge < expiryTime) {
+            // Use OAuth Bearer token
+            requestConfig.headers = requestConfig.headers || {};
+            requestConfig.headers['Authorization'] = `Bearer ${tokenData.access_token}`;
+            logger.debug('Using OAuth Bearer token for authentication');
+            return requestConfig;
+          } else {
+            logger.warn('OAuth token expired, attempting to refresh...');
+            // Try to refresh the token
+            if (tokenData.refresh_token) {
+              try {
+                const { JiraOAuthManager } = await import('../auth/oauth-manager.js');
+                const oauthManager = new JiraOAuthManager(this.config.baseUrl);
+                const newTokens = await oauthManager.refreshToken(tokenData.refresh_token);
+                
+                // Save new tokens
+                const newTokenData = {
+                  access_token: newTokens.access_token,
+                  refresh_token: newTokens.refresh_token || tokenData.refresh_token,
+                  expires_in: newTokens.expires_in,
+                  token_type: newTokens.token_type,
+                  timestamp: Date.now()
+                };
+                
+                fs.writeFileSync(tokenFile, JSON.stringify(newTokenData, null, 2));
+                
+                requestConfig.headers = requestConfig.headers || {};
+                requestConfig.headers['Authorization'] = `Bearer ${newTokens.access_token}`;
+                logger.info('OAuth token refreshed successfully');
+                return requestConfig;
+              } catch (refreshError) {
+                logger.error('Token refresh failed:', refreshError);
+                fs.unlinkSync(tokenFile); // Remove invalid token file
+              }
+            }
+            logger.warn('No valid refresh token, falling back to API token');
+          }
+        }
+      } catch (error) {
+        logger.debug('No valid OAuth tokens found, using API token fallback');
+      }
+      
+      // Fallback to API token authentication
       if (this.config.apiToken) {
         requestConfig.auth = {
           username: 'api-token', // For Atlassian Cloud
           password: this.config.apiToken,
         };
+      } else {
+        logger.error('No authentication method available. Please run OAuth flow or provide API token.');
+        throw new Error('Authentication required: No OAuth token or API token available');
       }
       
       logger.debug(`Making request: ${requestConfig.method?.toUpperCase()} ${requestConfig.url}`);
